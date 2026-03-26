@@ -1,0 +1,6 @@
+name: astrbot_plugin_qiukan
+display_name: 骑砍英雄传
+desc: 骑砍风格文字RPG游戏插件，支持聊天指令和网页界面，包含劫匪战斗、等级系统、管理员系统
+version: v1.0.0
+author: Uncle-Clyde
+repo: https://github.com/Uncle-Clyde/astrbot_plugin_qiukan
