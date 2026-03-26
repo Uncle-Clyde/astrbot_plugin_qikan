@@ -1,0 +1,397 @@
+/* 骑砍英雄传 - 地图样式 */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+    background: #1a1a2e;
+    color: #eee;
+    overflow: hidden;
+}
+
+#app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* 头部 */
+.map-header {
+    background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #d4a453;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.map-header h1 {
+    color: #d4a453;
+    font-size: 24px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+
+.player-info {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+    color: #aaa;
+}
+
+.player-info span {
+    background: rgba(255,255,255,0.1);
+    padding: 5px 12px;
+    border-radius: 4px;
+}
+
+/* 地图容器 */
+.map-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+}
+
+.map-canvas {
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    position: relative;
+    overflow: hidden;
+}
+
+.map-canvas:active {
+    cursor: grabbing;
+}
+
+.map-bg {
+    position: absolute;
+    width: 2000px;
+    height: 2000px;
+    left: -500px;
+    top: -500px;
+    background: 
+        radial-gradient(ellipse at 30% 20%, #3d5a3d 0%, transparent 50%),
+        radial-gradient(ellipse at 70% 30%, #4a6741 0%, transparent 40%),
+        radial-gradient(ellipse at 50% 60%, #3a4a35 0%, transparent 50%),
+        linear-gradient(135deg, #2d3a2d 0%, #1a251a 50%, #1a2a1a 100%);
+    background-size: 100% 100%;
+}
+
+.map-bg::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 30 L30 0 L60 30 L30 60Z' fill='none' stroke='%23ffffff08' stroke-width='1'/%3E%3C/svg%3E");
+    opacity: 0.3;
+}
+
+.map-content {
+    position: absolute;
+    width: 1000px;
+    height: 1000px;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+    transition: transform 0.1s ease-out;
+}
+
+/* 地点标记 */
+.location-marker {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 10;
+}
+
+.location-marker:hover {
+    transform: translate(-50%, -50%) scale(1.2);
+    z-index: 20;
+}
+
+.marker-icon {
+    display: block;
+    font-size: 28px;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+    filter: drop-shadow(0 0 3px rgba(255,255,255,0.3));
+}
+
+.marker-name {
+    display: block;
+    font-size: 11px;
+    text-align: center;
+    color: #fff;
+    text-shadow: 1px 1px 2px #000, -1px -1px 2px #000;
+    white-space: nowrap;
+    margin-top: 2px;
+}
+
+/* 势力颜色 */
+.location-marker.faction-0 { filter: hue-rotate(0deg); }
+.location-marker.faction-1 { filter: hue-rotate(180deg); }
+.location-marker.faction-2 { filter: hue-rotate(200deg); }
+.location-marker.faction-3 { filter: hue-rotate(90deg); }
+.location-marker.faction-4 { filter: hue-rotate(45deg); }
+.location-marker.faction-5 { filter: hue-rotate(330deg); }
+.location-marker.faction--1 { filter: grayscale(100%); opacity: 0.8; }
+
+/* 玩家标记 */
+.player-marker {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    font-size: 32px;
+    z-index: 100;
+    animation: pulse 1.5s infinite;
+    filter: drop-shadow(0 0 8px #ffd700);
+}
+
+@keyframes pulse {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.1); }
+}
+
+/* 旅行路径 */
+.travel-path {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+}
+
+/* 缩放控制 */
+.zoom-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px 15px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 200;
+}
+
+.zoom-controls button {
+    background: #d4a453;
+    border: none;
+    color: #1a1a2e;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+}
+
+.zoom-controls button:hover {
+    background: #e8b866;
+}
+
+.zoom-controls span {
+    min-width: 50px;
+    text-align: center;
+}
+
+/* 图例 */
+.map-legend {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    background: rgba(0,0,0,0.7);
+    padding: 15px;
+    border-radius: 8px;
+    z-index: 200;
+}
+
+.map-legend h4 {
+    color: #d4a453;
+    margin-bottom: 10px;
+    font-size: 14px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    margin: 5px 0;
+    color: #ccc;
+}
+
+.legend-item .icon {
+    font-size: 16px;
+}
+
+/* 地点详情面板 */
+.location-panel {
+    position: absolute;
+    right: 20px;
+    top: 80px;
+    width: 320px;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    border: 2px solid #d4a453;
+    border-radius: 12px;
+    z-index: 300;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    border-bottom: 1px solid rgba(212,164,83,0.3);
+}
+
+.panel-header h2 {
+    color: #d4a453;
+    font-size: 18px;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 24px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.close-btn:hover {
+    color: #fff;
+}
+
+.panel-content {
+    padding: 15px;
+}
+
+.info-row {
+    display: flex;
+    margin: 8px 0;
+    font-size: 14px;
+}
+
+.info-row .label {
+    color: #888;
+    min-width: 70px;
+}
+
+.info-row .value {
+    color: #eee;
+}
+
+.info-row .desc {
+    color: #aaa;
+    font-size: 13px;
+}
+
+.faction-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.faction-badge.faction-0 { background: #8B4513; }
+.faction-badge.faction-1 { background: #2F4F4F; }
+.faction-badge.faction-2 { background: #4682B4; }
+.faction-badge.faction-3 { background: #556B2F; }
+.faction-badge.faction-4 { background: #DAA520; }
+.faction-badge.faction-5 { background: #8B0000; }
+
+.extra-info {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+}
+
+.travel-btn {
+    width: 100%;
+    margin-top: 15px;
+    padding: 12px;
+    background: linear-gradient(135deg, #d4a453 0%, #b8943f 100%);
+    border: none;
+    border-radius: 6px;
+    color: #1a1a2e;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.travel-btn:hover {
+    background: linear-gradient(135deg, #e8b866 0%, #d4a453 100%);
+    transform: translateY(-2px);
+}
+
+.travel-info {
+    text-align: center;
+    color: #d4a453;
+    margin-top: 10px;
+    font-size: 14px;
+}
+
+/* 旅行进度条 */
+.travel-progress-bar {
+    position: absolute;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 400px;
+    background: rgba(0,0,0,0.8);
+    padding: 15px 20px;
+    border-radius: 8px;
+    z-index: 200;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.progress-track {
+    height: 8px;
+    background: #333;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #d4a453, #ffd700);
+    transition: width 0.5s ease;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .map-header {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .player-info {
+        font-size: 12px;
+        gap: 10px;
+    }
+    
+    .location-panel {
+        width: 280px;
+        right: 10px;
+        top: auto;
+        bottom: 100px;
+    }
+    
+    .travel-progress-bar {
+        width: 90%;
+    }
+}

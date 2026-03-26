@@ -1035,3 +1035,145 @@ def get_player_bandit_rank(total_defeated: int) -> tuple[str, int, int]:
             return name, i + 1, 999999
     
     return "领主", len(ranks), 999999
+
+
+def generate_quests_for_location(location_id: str, player_level: int) -> list[dict]:
+    """
+    根据地点生成可用任务。
+    """
+    quests = []
+    
+    all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
+    loc = all_locations.get(location_id)
+    
+    if not loc:
+        return quests
+    
+    base_difficulty = max(1, player_level // 3)
+    
+    if loc.location_type == LocationType.TOWN:
+        quests.extend([
+            {
+                "quest_id": f"deliver_{location_id}_{i}",
+                "name": f"送货任务 #{i}",
+                "description": f"将货物从{loc.name}送往附近城镇",
+                "type": "deliver",
+                "difficulty": base_difficulty,
+                "level_range": (max(0, player_level - 2), player_level + 2),
+                "exp_reward": 50 * base_difficulty,
+                "gold_reward": 30 * base_difficulty,
+                "duration": 300,
+            }
+            for i in range(1, 4)
+        ])
+        
+        quests.extend([
+            {
+                "quest_id": f"combat_{location_id}_{i}",
+                "name": f"清剿劫匪 #{i}",
+                "description": f"清剿{loc.name}附近的劫匪",
+                "type": "combat",
+                "difficulty": base_difficulty + 1,
+                "level_range": (max(0, player_level - 1), player_level + 3),
+                "exp_reward": 80 * (base_difficulty + 1),
+                "gold_reward": 50 * (base_difficulty + 1),
+                "duration": 600,
+            }
+            for i in range(1, 3)
+        ])
+    
+    elif loc.location_type == LocationType.VILLAGE:
+        quests.extend([
+            {
+                "quest_id": f"escort_{location_id}_{i}",
+                "name": f"护送任务 #{i}",
+                "description": f"护送村民前往{loc.name}",
+                "type": "escort",
+                "difficulty": base_difficulty,
+                "level_range": (max(0, player_level - 2), player_level + 2),
+                "exp_reward": 60 * base_difficulty,
+                "gold_reward": 40 * base_difficulty,
+                "duration": 400,
+            }
+            for i in range(1, 3)
+        ])
+    
+    elif loc.location_type == LocationType.BANDIT_CAMP:
+        for i in range(1, 4):
+            quests.append({
+                "quest_id": f"attack_{location_id}_{i}",
+                "name": f"攻打匪窝 #{i}",
+                "description": f"带领军队攻占{loc.name}",
+                "type": "combat",
+                "difficulty": loc.difficulty,
+                "level_range": loc.level_range,
+                "exp_reward": 150 * loc.difficulty,
+                "gold_reward": 100 * loc.difficulty,
+                "duration": 900,
+            })
+    
+    return quests
+
+
+def calculate_map_travel_time(x1: float, y1: float, x2: float, y2: float, base_speed: float = 50.0) -> float:
+    """
+    计算两点间旅行时间（秒）。
+    基于欧几里得距离。
+    """
+    import math
+    distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+    return distance / base_speed
+
+
+def check_travel_encounter(distance: float, player_level: int) -> dict | None:
+    """
+    检查旅途中是否遭遇劫匪。
+    返回遭遇信息或None。
+    """
+    encounter_chance = 0.15 + (distance / 1000) * 0.1
+    encounter_chance = min(0.5, encounter_chance)
+    
+    import random
+    if random.random() < encounter_chance:
+        bandit_types = list(BanditType)
+        bandit_type = random.choice(bandit_types)
+        bandit = get_bandit_manager().spawn_bandit(bandit_type, 0, 0)
+        
+        scale = max(0.5, player_level / 10)
+        bandit.level = max(1, int(bandit.level * scale))
+        
+        return {
+            "encountered": True,
+            "bandit_id": bandit.bandit_id,
+            "bandit_name": bandit.name,
+            "bandit_type": bandit.bandit_type,
+            "bandit_level": bandit.level,
+            "description": f"旅途中遭遇了{bandit.name}！",
+        }
+    
+    return None
+
+
+def get_location_icon(location_type: int) -> str:
+    """获取地点类型的图标。"""
+    icons = {
+        LocationType.VILLAGE: "🏘️",
+        LocationType.TOWN: "🏰",
+        LocationType.CASTLE: "⚔️",
+        LocationType.BANDIT_CAMP: "⛺",
+    }
+    return icons.get(location_type, "📍")
+
+
+def get_faction_color(faction: int) -> str:
+    """获取势力颜色。"""
+    colors = {
+        Faction.SWADIA: "#8B4513",
+        Faction.VAEGIRS: "#2F4F4F",
+        Faction.NORDS: "#4682B4",
+        Faction.RHODOKS: "#556B2F",
+        Faction.KHERGITS: "#DAA520",
+        Faction.SARRANIDS: "#8B0000",
+    }
+    return colors.get(faction, "#808080")
+

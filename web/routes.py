@@ -1226,4 +1226,283 @@ def create_router(
             ]
         }
 
+    # ==================== 地图系统 API ====================
+
+    @router.get("/api/map/locations")
+    async def get_map_locations():
+        """获取所有地图地点（城镇/城堡/村庄/匪窝）。"""
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS, LocationType, FACTION_NAMES, FACTION_SHORT_NAMES
+        
+        locations = []
+        
+        for loc_id, loc in TOWNS.items():
+            locations.append({
+                "id": loc.location_id,
+                "name": loc.name,
+                "type": "town",
+                "type_name": "城镇",
+                "faction": loc.faction,
+                "faction_name": FACTION_NAMES.get(loc.faction, "无"),
+                "faction_short": FACTION_SHORT_NAMES.get(loc.faction, ""),
+                "x": loc.x,
+                "y": loc.y,
+                "level_range": loc.level_range,
+                "description": loc.description,
+                "prosperity": loc.prosperity if hasattr(loc, 'prosperity') else 50,
+            })
+        
+        for loc_id, loc in CASTLES.items():
+            locations.append({
+                "id": loc.location_id,
+                "name": loc.name,
+                "type": "castle",
+                "type_name": "城堡",
+                "faction": loc.faction,
+                "faction_name": FACTION_NAMES.get(loc.faction, "无"),
+                "faction_short": FACTION_SHORT_NAMES.get(loc.faction, ""),
+                "x": loc.x,
+                "y": loc.y,
+                "level_range": loc.level_range,
+                "description": loc.description,
+                "garrison_size": loc.garrison_size,
+                "strategic_value": loc.strategic_value,
+            })
+        
+        for loc_id, loc in VILLAGES.items():
+            locations.append({
+                "id": loc.location_id,
+                "name": loc.name,
+                "type": "village",
+                "type_name": "村庄",
+                "faction": loc.faction,
+                "faction_name": FACTION_NAMES.get(loc.faction, "无"),
+                "faction_short": FACTION_SHORT_NAMES.get(loc.faction, ""),
+                "x": loc.x,
+                "y": loc.y,
+                "level_range": loc.level_range,
+                "description": loc.description,
+                "village_type": loc.village_type,
+                "production": loc.production,
+                "prosperity": loc.prosperity,
+            })
+        
+        for loc_id, loc in BANDIT_CAMPS.items():
+            locations.append({
+                "id": loc.location_id,
+                "name": loc.name,
+                "type": "bandit_camp",
+                "type_name": "匪窝",
+                "faction": -1,
+                "faction_name": "无",
+                "faction_short": "",
+                "x": loc.x,
+                "y": loc.y,
+                "level_range": loc.level_range,
+                "description": loc.description,
+                "bandit_type": loc.bandit_type,
+                "difficulty": loc.difficulty,
+                "rewards": loc.rewards,
+            })
+        
+        return {"success": True, "locations": locations}
+
+    @router.get("/api/map/player")
+    async def get_player_map_state(user_id: str = ""):
+        """获取玩家地图状态。"""
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        
+        current_location = None
+        if map_state and map_state.current_location:
+            for loc_id, loc in {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}.items():
+                if loc.location_id == map_state.current_location:
+                    current_location = {
+                        "id": loc.location_id,
+                        "name": loc.name,
+                        "type": loc.location_type,
+                    }
+                    break
+        
+        return {
+            "success": True,
+            "player": {
+                "user_id": player.user_id,
+                "name": player.name,
+                "x": map_state.x if map_state else 500,
+                "y": map_state.y if map_state else 500,
+                "level": getattr(player, 'level', 1),
+                "current_location": current_location,
+                "travel_destination": map_state.travel_destination if map_state else "",
+                "travel_progress": map_state.travel_progress if map_state else 0,
+                "travel_time": map_state.travel_time if map_state else 0,
+                "active_quests": list(map_state.active_quests) if map_state else [],
+            }
+        }
+
+    @router.get("/api/map/location/{location_id}")
+    async def get_location_detail(location_id: str):
+        """获取地点详细信息。"""
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS, LocationType, FACTION_NAMES
+        
+        all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
+        loc = all_locations.get(location_id)
+        
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+        
+        type_map = {
+            LocationType.TOWN: ("town", "城镇"),
+            LocationType.CASTLE: ("castle", "城堡"),
+            LocationType.VILLAGE: ("village", "村庄"),
+            LocationType.BANDIT_CAMP: ("bandit_camp", "匪窝"),
+        }
+        
+        result = {
+            "success": True,
+            "location": {
+                "id": loc.location_id,
+                "name": loc.name,
+                "type": type_map.get(loc.location_type, ("unknown", "未知"))[0],
+                "type_name": type_map.get(loc.location_type, ("unknown", "未知"))[1],
+                "faction": loc.faction,
+                "faction_name": FACTION_NAMES.get(loc.faction, "无"),
+                "x": loc.x,
+                "y": loc.y,
+                "level_range": loc.level_range,
+                "description": loc.description,
+            }
+        }
+        
+        if loc.location_type == LocationType.TOWN:
+            result["location"]["shop_items"] = loc.shop_items
+            result["location"]["tax_rate"] = loc.tax_rate
+        elif loc.location_type == LocationType.VILLAGE:
+            result["location"]["village_type"] = loc.village_type
+            result["location"]["production"] = loc.production
+            result["location"]["prosperity"] = loc.prosperity
+        elif loc.location_type == LocationType.CASTLE:
+            result["location"]["garrison_size"] = loc.garrison_size
+            result["location"]["strategic_value"] = loc.strategic_value
+        elif loc.location_type == LocationType.BANDIT_CAMP:
+            result["location"]["bandit_type"] = loc.bandit_type
+            result["location"]["difficulty"] = loc.difficulty
+            result["location"]["rewards"] = loc.rewards
+        
+        return result
+
+    @router.get("/api/map/quests")
+    async def get_available_quests(user_id: str = "", location_id: str = ""):
+        """获取指定地点的任务列表。"""
+        from ..game.map_system import generate_quests_for_location
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        quests = generate_quests_for_location(location_id, player.level if hasattr(player, 'level') else 1)
+        
+        return {"success": True, "quests": quests}
+
+    @router.post("/api/map/travel")
+    async def start_travel(data: dict):
+        """开始旅行到指定地点。"""
+        user_id = data.get("user_id", "")
+        destination = data.get("destination", "")
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS, calculate_map_travel_time
+        all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
+        
+        dest_loc = all_locations.get(destination)
+        if not dest_loc:
+            return {"success": False, "message": "目的地不存在"}
+        
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        if not map_state:
+            return {"success": False, "message": "玩家地图状态异常"}
+        
+        map_state.travel_destination = destination
+        map_state.travel_progress = 0
+        map_state.travel_time = calculate_map_travel_time(
+            map_state.x, map_state.y,
+            dest_loc.x, dest_loc.y
+        )
+        
+        return {
+            "success": True,
+            "message": f"开始前往{dest_loc.name}",
+            "destination": dest_loc.name,
+            "duration": map_state.travel_time,
+        }
+
+    @router.post("/api/map/arrive")
+    async def arrive_at_location(data: dict):
+        """玩家到达指定地点。"""
+        user_id = data.get("user_id", "")
+        location = data.get("location", "")
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS
+        all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
+        
+        loc = all_locations.get(location)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+        
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        if map_state:
+            map_state.current_location = location
+            map_state.x = loc.x
+            map_state.y = loc.y
+            map_state.travel_destination = ""
+            map_state.travel_progress = 0
+        
+        return {
+            "success": True,
+            "message": f"已到达{loc.name}",
+            "location": {
+                "id": loc.location_id,
+                "name": loc.name,
+                "type": loc.location_type,
+            }
+        }
+
+    @router.get("/api/map/factions")
+    async def get_factions():
+        """获取所有势力信息。"""
+        from ..game.map_system import FACTION_NAMES, FACTION_SHORT_NAMES
+        
+        factions = []
+        for i in range(6):
+            factions.append({
+                "id": i,
+                "name": FACTION_NAMES.get(i, "未知势力"),
+                "short_name": FACTION_SHORT_NAMES.get(i, ""),
+            })
+        
+        return {"success": True, "factions": factions}
+
     return router

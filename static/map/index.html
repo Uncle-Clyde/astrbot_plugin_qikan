@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卡拉迪亚大陆 - 骑砍英雄传</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="css/map.css">
+</head>
+<body>
+    <div id="app">
+        <div class="map-header">
+            <h1>🗺️ 卡拉迪亚大陆</h1>
+            <div class="player-info">
+                <span>玩家: {{ playerName || '未登录' }}</span>
+                <span>等级: {{ playerLevel || 1 }}</span>
+                <span>位置: {{ currentLocation || '流浪中' }}</span>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div class="map-canvas" 
+                 ref="mapCanvas"
+                 @mousedown="startPan"
+                 @mousemove="doPan"
+                 @mouseup="endPan"
+                 @wheel="handleZoom"
+                 @click="handleMapClick">
+                <div class="map-bg"></div>
+                <div class="map-content" :style="mapStyle">
+                    <!-- 地点标记 -->
+                    <div v-for="loc in locations" 
+                         :key="loc.id"
+                         class="location-marker"
+                         :class="[loc.type, 'faction-' + loc.faction]"
+                         :style="{ left: loc.x + 'px', top: loc.y + 'px' }"
+                         @click.stop="selectLocation(loc)">
+                        <span class="marker-icon">{{ getMarkerIcon(loc.type) }}</span>
+                        <span class="marker-name">{{ loc.name }}</span>
+                    </div>
+                    
+                    <!-- 玩家位置 -->
+                    <div v-if="playerX > 0" 
+                         class="player-marker"
+                         :style="{ left: playerX + 'px', top: playerY + 'px' }">
+                        ⚔️
+                    </div>
+                    
+                    <!-- 旅行路径 -->
+                    <svg v-if="isTraveling && travelDestination" class="travel-path">
+                        <line :x1="playerX" :y1="playerY" 
+                              :x2="travelTargetX" :y2="travelTargetY"
+                              stroke="#FFD700" stroke-width="2" stroke-dasharray="5,5"/>
+                    </svg>
+                </div>
+            </div>
+            
+            <!-- 缩放控制 -->
+            <div class="zoom-controls">
+                <button @click="zoomIn">➕</button>
+                <span>{{ Math.round(zoom * 100) }}%</span>
+                <button @click="zoomOut">➖</button>
+                <button @click="resetView">🔄</button>
+            </div>
+            
+            <!-- 图例 -->
+            <div class="map-legend">
+                <h4>图例</h4>
+                <div class="legend-item"><span class="icon">🏰</span> 城镇</div>
+                <div class="legend-item"><span class="icon">⚔️</span> 城堡</div>
+                <div class="legend-item"><span class="icon">🏘️</span> 村庄</div>
+                <div class="legend-item"><span class="icon">⛺</span> 匪窝</div>
+                <div class="legend-item"><span class="icon">⚔️</span> 玩家</div>
+            </div>
+        </div>
+        
+        <!-- 地点详情面板 -->
+        <div v-if="selectedLocation" class="location-panel">
+            <div class="panel-header">
+                <h2>{{ selectedLocation.name }}</h2>
+                <button class="close-btn" @click="selectedLocation = null">×</button>
+            </div>
+            <div class="panel-content">
+                <div class="info-row">
+                    <span class="label">类型:</span>
+                    <span class="value">{{ selectedLocation.type_name }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">势力:</span>
+                    <span class="value faction-badge" :class="'faction-' + selectedLocation.faction">
+                        {{ selectedLocation.faction_name }}
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="label">等级范围:</span>
+                    <span class="value">Lv.{{ selectedLocation.level_range[0] }}-{{ selectedLocation.level_range[1] }}</span>
+                </div>
+                <div class="info-row">
+                    <span class="label">描述:</span>
+                    <span class="value desc">{{ selectedLocation.description }}</span>
+                </div>
+                
+                <div v-if="selectedLocation.type === 'town'" class="extra-info">
+                    <div class="info-row">
+                        <span class="label">商品:</span>
+                        <span class="value">{{ selectedLocation.shop_items?.join(', ') || '无' }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">税率:</span>
+                        <span class="value">{{ ((selectedLocation.tax_rate || 0) * 100).toFixed(0) }}%</span>
+                    </div>
+                </div>
+                
+                <div v-if="selectedLocation.type === 'village'" class="extra-info">
+                    <div class="info-row">
+                        <span class="label">村庄类型:</span>
+                        <span class="value">{{ selectedLocation.village_type }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">特产:</span>
+                        <span class="value">{{ selectedLocation.production }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">繁荣度:</span>
+                        <span class="value">{{ selectedLocation.prosperity }}/100</span>
+                    </div>
+                </div>
+                
+                <div v-if="selectedLocation.type === 'bandit_camp'" class="extra-info">
+                    <div class="info-row">
+                        <span class="label">匪徒类型:</span>
+                        <span class="value">{{ selectedLocation.bandit_type }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">难度:</span>
+                        <span class="value">{{ '⭐'.repeat(selectedLocation.difficulty || 1) }}</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="label">奖励:</span>
+                        <span class="value">{{ selectedLocation.rewards }} 第纳尔</span>
+                    </div>
+                </div>
+                
+                <button v-if="canTravel" class="travel-btn" @click="startTravel">
+                    🚶 前往此处
+                </button>
+                <p v-if="isTraveling" class="travel-info">
+                    🚶 正在前往 {{ travelDestination }}... {{ travelProgress }}%
+                </p>
+            </div>
+        </div>
+        
+        <!-- 旅行进度条 -->
+        <div v-if="isTraveling" class="travel-progress-bar">
+            <div class="progress-info">
+                <span>前往: {{ travelDestination }}</span>
+                <span>{{ travelProgress }}%</span>
+            </div>
+            <div class="progress-track">
+                <div class="progress-fill" :style="{ width: travelProgress + '%' }"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="js/map.js"></script>
+</body>
+</html>
