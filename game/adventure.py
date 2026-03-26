@@ -455,14 +455,14 @@ def _apply_gongfa_mastery(player: Player) -> list[str]:
         gf_exp_gain = random.randint(3, 8)
         cur_exp = getattr(player, exp_attr, 0) + gf_exp_gain
         if cur_exp >= gf.mastery_exp:
-            # 地阶+战技的大成→圆满需消耗道韵（不够则暂停累积）
+            # 高阶+战技的大成→圆满需消耗声望（不够则暂停累积）
             if gf.tier >= 2 and mastery == 2 and gf.dao_yun_cost > 0:
                 if player.dao_yun < gf.dao_yun_cost:
                     cur_exp = gf.mastery_exp - 1
                     setattr(player, exp_attr, cur_exp)
                     continue
                 player.dao_yun -= gf.dao_yun_cost
-                msgs.append(f"消耗道韵{gf.dao_yun_cost}，助战技【{gf.name}】升级")
+                msgs.append(f"消耗声望{gf.dao_yun_cost}，助战技【{gf.name}】升级")
             cur_exp -= gf.mastery_exp
             mastery += 1
             setattr(player, mastery_attr, mastery)

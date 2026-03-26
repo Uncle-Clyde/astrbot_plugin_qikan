@@ -98,7 +98,7 @@ class XiuxianPlugin(Star):
     def _render_image_path(self, img_bytes: bytes, tag: str = "img") -> str | None:
         """将渲染后的图片 bytes 落盘，返回本地路径供 image_result 发送。"""
         if not isinstance(img_bytes, (bytes, bytearray)):
-            logger.error(f"修仙世界：渲染结果不是 bytes，tag={tag}")
+            logger.error(f"骑砍世界：渲染结果不是 bytes，tag={tag}")
             return None
 
         cache_dir = self._image_cache_dir or os.path.join(
@@ -406,7 +406,7 @@ class XiuxianPlugin(Star):
             return {"allow": True, "reason": ""}
 
         prompt = (
-            "你是修仙游戏世界频道聊天内容审核器。\n"
+            "你是骑砍游戏世界频道聊天内容审核器。\n"
             "请判断以下聊天内容是否包含："
             "脏话、骂人、色情、低俗挑逗、人身攻击。\n"
             "只有在\u201c高度确定违规\u201d时才拒绝；普通聊天和游戏讨论必须放行。\n"
@@ -418,7 +418,7 @@ class XiuxianPlugin(Star):
         try:
             llm_response = await provider.text_chat(prompt=prompt, contexts=[])
         except Exception:
-            logger.exception("修仙世界：聊天AI审核调用失败")
+            logger.exception("骑砍世界：聊天AI审核调用失败")
             return {"allow": True, "reason": ""}
 
         raw = str(

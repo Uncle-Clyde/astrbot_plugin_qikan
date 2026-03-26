@@ -50,7 +50,7 @@ from . import sect as sect_mod
 logger = logging.getLogger("mbwar.engine")
 
 _BAD_NAME_KEYWORDS = (
-    # 仅保留“高置信度违规词”，避免误伤正常道号
+    # 仅保留“高置信度违规词”，避免误伤正常角色名
     "色情", "淫秽", "淫荡", "约炮", "援交", "一夜情", "开房", "做爱",
     "嫖娼", "卖淫", "强奸", "轮奸",
     "鸡巴", "阴茎", "阴道", "龟头", "乳房", "大屌",
@@ -110,7 +110,7 @@ class GameEngine:
 
         self._players = await self._data_manager.load_all_players()
         normalized = False
-        # 构建道号索引
+        # 构建角色名索引
         for uid, player in self._players.items():
             self._name_index[player.name] = uid
             if self._normalize_player_realm_progress(player):
@@ -2534,7 +2534,7 @@ class GameEngine:
                 try:
                     await self._notify_player_update(player)
                 except Exception:
-                    logger.exception("修仙世界：玩家状态推送失败 user_id=%s", player.user_id)
+                    logger.exception("骑砍世界：玩家状态推送失败 user_id=%s", player.user_id)
                 await self._notify_market_changed("list")
         return result
 
@@ -2601,11 +2601,11 @@ class GameEngine:
                     try:
                         await self._notify_player_update(player)
                     except Exception:
-                        logger.exception("修仙世界：玩家状态推送失败 user_id=%s", player.user_id)
+                        logger.exception("骑砍世界：玩家状态推送失败 user_id=%s", player.user_id)
                     try:
                         await self._notify_player_update(seller)
                     except Exception:
-                        logger.exception("修仙世界：玩家状态推送失败 user_id=%s", seller_id)
+                        logger.exception("骑砍世界：玩家状态推送失败 user_id=%s", seller_id)
                     await self._notify_market_changed("buy")
         return result
 
@@ -2632,7 +2632,7 @@ class GameEngine:
                 try:
                     await self._notify_player_update(player)
                 except Exception:
-                    logger.exception("修仙世界：玩家状态推送失败 user_id=%s", player.user_id)
+                    logger.exception("骑砍世界：玩家状态推送失败 user_id=%s", player.user_id)
                 await self._notify_market_changed("cancel")
         return result
 
@@ -2908,7 +2908,7 @@ class GameEngine:
             try:
                 await self._notify_player_update(player)
             except Exception:
-                logger.exception("修仙世界：玩家状态推送失败 user_id=%s", user_id)
+                logger.exception("骑砍世界：玩家状态推送失败 user_id=%s", user_id)
         return result
 
     async def sect_warehouse_exchange(self, user_id: str, item_id: str, count: int = 1) -> dict:
@@ -2930,7 +2930,7 @@ class GameEngine:
             try:
                 await self._notify_player_update(player)
             except Exception:
-                logger.exception("修仙世界：玩家状态推送失败 user_id=%s", user_id)
+                logger.exception("骑砍世界：玩家状态推送失败 user_id=%s", user_id)
         return result
 
     async def sect_warehouse_list(self, user_id: str) -> dict:

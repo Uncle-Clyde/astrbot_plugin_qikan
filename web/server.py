@@ -24,7 +24,7 @@ class WebServer:
         guard_token: str = "",
         admin_account: str = "",
         admin_password: str = "",
-        command_prefix: str = "修仙",
+        command_prefix: str = "骑砍",
         api_rate_limit_1s_count: int = 10000,
     ):
         self.host = host
@@ -34,7 +34,7 @@ class WebServer:
         self._task: asyncio.Task | None = None
 
         # 创建 FastAPI 应用
-        self.app = FastAPI(title="修仙世界", docs_url=None, redoc_url=None)
+        self.app = FastAPI(title="骑砍世界", docs_url=None, redoc_url=None)
 
         # 静态文件目录
         static_dir = Path(__file__).parent.parent / "static"

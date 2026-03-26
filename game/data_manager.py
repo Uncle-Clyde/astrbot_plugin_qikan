@@ -445,7 +445,7 @@ class DataManager:
         await self._alter_add_column("world_chat_messages", "sect_role", "TEXT DEFAULT ''")
         await self._alter_add_column("world_chat_messages", "sect_role_name", "TEXT DEFAULT ''")
         await self._ensure_sect_schema(force=True)
-        # 爵位表迁移：新增道韵字段
+        # 爵位表迁移：新增声望字段
         await self._alter_add_column("realms", "sub_dao_yun_costs", "TEXT DEFAULT ''")
         await self._alter_add_column("realms", "breakthrough_dao_yun_cost", "INTEGER DEFAULT 0")
         # 爵位表首次创建时写入一份默认数据；之后完全以数据库内容为准
@@ -809,7 +809,7 @@ class DataManager:
         await self.db.commit()
 
     async def _backfill_realm_dao_yun_defaults(self):
-        """为旧 realms 表补齐新增的道韵字段默认值，不覆盖已编辑数据。"""
+        """为旧 realms 表补齐新增的声望字段默认值，不覆盖已编辑数据。"""
         import json as _json
         from .constants import REALM_CONFIG as DEFAULT_REALM_CONFIG
 
@@ -1036,7 +1036,7 @@ class DataManager:
             ("红尘历练", "仙门试炼", "仙门弟子间的切磋比试"),
             ("红尘历练", "悬赏猎杀", "接取悬赏任务追捕通缉犯"),
             ("红尘历练", "护送商队", "护送灵材商队穿越危险地带"),
-            ("红尘历练", "擂台争霸", "修仙界武斗擂台赛"),
+            ("红尘历练", "擂台争霸", "角斗场武斗大赛"),
             ("红尘历练", "奇遇仙缘", "偶遇高人，机缘降临"),
             ("红尘历练", "山贼劫道", "路遇山贼拦路打劫"),
             ("红尘历练", "江湖恩怨", "卷入江湖恩怨纷争"),

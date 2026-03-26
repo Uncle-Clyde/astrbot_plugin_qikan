@@ -275,7 +275,7 @@ def _apply_effect(player: Player, effect: dict) -> str:
     if "dao_yun_boost" in effect:
         boost = effect["dao_yun_boost"]
         player.dao_yun += boost
-        messages.append(f"道韵永久增加{boost}")
+        messages.append(f"声望永久增加{boost}")
     if "max_hp_boost" in effect and "_temp_buff" not in effect:
         boost = effect["max_hp_boost"]
         player.permanent_max_hp_bonus = getattr(player, "permanent_max_hp_bonus", 0) + boost

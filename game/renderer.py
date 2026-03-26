@@ -123,7 +123,7 @@ def render_panel(data: dict) -> bytes:
         ("防御", str(total_def)),
         ("第纳尔", str(data.get("spirit_stones", 0))),
         ("体力", str(data.get("lingqi", 0))),
-        ("道韵", str(data.get("dao_yun", 0))),
+        ("声望", str(data.get("dao_yun", 0))),
         ("被动技能值", str(data.get("heart_method_value", 0))),
     ]
     left_x = 30
@@ -188,7 +188,7 @@ def render_panel(data: dict) -> bytes:
     return buf.getvalue()
 
 
-def render_help(commands: list[tuple[str, str]], prefix: str = "修仙") -> bytes:
+def render_help(commands: list[tuple[str, str]], prefix: str = "骑砍") -> bytes:
     """绘制帮助指令列表图片。"""
     line_h = 36
     padding = 20
@@ -653,7 +653,7 @@ def render_item_detail(data: dict) -> bytes:
         if data.get("exp_multiplier", 0):
             rows.append(("经验倍率", f"+{data['exp_multiplier'] * 100:.0f}%"))
         if data.get("dao_yun_rate", 0):
-            rows.append(("道韵获取率", f"{data['dao_yun_rate'] * 100:.0f}%"))
+            rows.append(("声望获取率", f"{data['dao_yun_rate'] * 100:.0f}%"))
     elif item_type == "gongfa":
         type_label = "战技卷轴"
         rows.append(("品阶", data.get("tier_name", "未知")))

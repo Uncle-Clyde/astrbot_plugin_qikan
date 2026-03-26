@@ -100,7 +100,7 @@ async def perform_cultivate(player: Player, cooldown: int = 60) -> dict:
             player.lingqi += actual
             extra_msgs.append(f"战技回灵+{actual}")
 
-    # 道韵获取（仅化神期及以上被动技能生效）
+    # 声望获取（高阶爵位被动技能生效）
     hm = HEART_METHOD_REGISTRY.get(player.heart_method)
     if (
         hm
@@ -110,7 +110,7 @@ async def perform_cultivate(player: Player, cooldown: int = 60) -> dict:
     ):
         dao_gain = random.randint(1, 3 + player.realm)
         player.dao_yun += dao_gain
-        extra_msgs.append(f"感悟道韵+{dao_gain}")
+        extra_msgs.append(f"感悟声望+{dao_gain}")
 
     sub_level_up = False
 
@@ -118,14 +118,14 @@ async def perform_cultivate(player: Player, cooldown: int = 60) -> dict:
     if has_sub_realm(player.realm) and player.sub_realm < get_max_sub_realm(player.realm):
         sub_exp = realm_cfg.get("sub_exp_to_next", 0)
         if sub_exp > 0 and player.exp >= sub_exp:
-            # 高阶爵位小爵位升级需要道韵
+            # 高阶爵位小爵位升级需要声望
             dao_cost = get_sub_realm_dao_yun_cost(player.realm, player.sub_realm)
             if dao_cost > 0 and player.dao_yun < dao_cost:
-                extra_msgs.append(f"道韵不足，需{dao_cost}道韵晋升小爵位")
+                extra_msgs.append(f"声望不足，需{dao_cost}声望晋升小爵位")
             else:
                 if dao_cost > 0:
                     player.dao_yun -= dao_cost
-                    extra_msgs.append(f"消耗道韵{dao_cost}")
+                    extra_msgs.append(f"消耗声望{dao_cost}")
                 player.exp -= sub_exp
                 player.sub_realm += 1
                 sub_level_up = True
@@ -203,16 +203,16 @@ def _accumulate_gongfa_exp(player: Player) -> list[str]:
         gf_exp_gain = random.randint(1, 3)
         cur_exp = getattr(player, exp_attr, 0) + gf_exp_gain
         if cur_exp >= gf.mastery_exp:
-            # 大成→圆满道韵校验
+            # 大成→圆满声望校验
             if gf.tier >= 2 and mastery == 2 and gf.dao_yun_cost > 0:
                 if player.dao_yun < gf.dao_yun_cost:
-                    # 道韵不足，停止在阈值附近（不升级）
+                    # 声望不足，停止在阈值附近（不升级）
                     cur_exp = gf.mastery_exp - 1
                     setattr(player, exp_attr, cur_exp)
                     continue
-                # 道韵扣除和升级绑定执行
+                # 声望扣除和升级绑定执行
                 player.dao_yun -= gf.dao_yun_cost
-                msgs.append(f"消耗道韵{gf.dao_yun_cost}，助战技【{gf.name}】晋升")
+                msgs.append(f"消耗声望{gf.dao_yun_cost}，助战技【{gf.name}】晋升")
             cur_exp -= gf.mastery_exp
             mastery += 1
             setattr(player, mastery_attr, mastery)
@@ -270,12 +270,12 @@ async def attempt_breakthrough(player: Player, bonus_rate: float = 0.0,
             "died": False,
         }
 
-    # 高阶爵位晋升需要道韵
+    # 高阶爵位晋升需要声望
     dao_cost = get_breakthrough_dao_yun_cost(player.realm)
     if dao_cost > 0 and player.dao_yun < dao_cost:
         return {
             "success": False,
-            "message": f"道韵不足，晋升需要{dao_cost}道韵，当前{player.dao_yun}",
+            "message": f"声望不足，晋升需要{dao_cost}声望，当前{player.dao_yun}",
             "new_realm": None,
             "died": False,
         }
@@ -286,7 +286,7 @@ async def attempt_breakthrough(player: Player, bonus_rate: float = 0.0,
     death_rate = realm_cfg.get("death_rate", 0.0)
     if death_rate > 0 and not prevent_death:
         if random.random() < death_rate:
-            cost_msg = f"消耗道韵{dao_cost}。\n" if dao_cost > 0 else ""
+            cost_msg = f"消耗声望{dao_cost}。\n" if dao_cost > 0 else ""
             return {
                 "success": False,
                 "message": (
@@ -315,7 +315,7 @@ async def attempt_breakthrough(player: Player, bonus_rate: float = 0.0,
         player.defense = base_stats["defense"]
         player.lingqi = base_stats["max_lingqi"]
         new_name = get_realm_name(player.realm, player.sub_realm)
-        cost_msg = f"消耗道韵{dao_cost}，" if dao_cost > 0 else ""
+        cost_msg = f"消耗声望{dao_cost}，" if dao_cost > 0 else ""
         return {
             "success": True,
             "message": f"晋升成功！{cost_msg}当前爵位：{new_name}，气血恢复满血（晋升概率{rate_percent}%）",
@@ -332,7 +332,7 @@ async def attempt_breakthrough(player: Player, bonus_rate: float = 0.0,
             bonus_msg = f"，下次晋升成功率+{new_bonus_percent}%"
         else:
             bonus_msg = "，累积加成已达上限20%"
-        cost_msg = f"消耗道韵{dao_cost}，" if dao_cost > 0 else ""
+        cost_msg = f"消耗声望{dao_cost}，" if dao_cost > 0 else ""
         return {
             "success": False,
             "message": f"晋升失败！{cost_msg}损失{penalty}点经验（晋升概率{rate_percent}%{bonus_msg}）",

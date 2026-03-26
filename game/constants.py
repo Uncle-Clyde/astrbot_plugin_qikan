@@ -1651,7 +1651,7 @@ def get_max_sub_realm(realm: int) -> int:
 
 
 def get_sub_realm_dao_yun_cost(realm: int, sub_realm: int) -> int:
-    """获取从 sub_realm 升到 sub_realm+1 所需道韵（从 REALM_CONFIG 动态读取）。"""
+    """获取从 sub_realm 升到 sub_realm+1 所需声望（从 REALM_CONFIG 动态读取）。"""
     cfg = REALM_CONFIG.get(realm, {})
     costs = cfg.get("sub_dao_yun_costs", [])
     if not costs:
@@ -1660,7 +1660,7 @@ def get_sub_realm_dao_yun_cost(realm: int, sub_realm: int) -> int:
 
 
 def get_breakthrough_dao_yun_cost(realm: int) -> int:
-    """获取从 realm 晋升到 realm+1 所需道韵（从 REALM_CONFIG 动态读取）。"""
+    """获取从 realm 晋升到 realm+1 所需声望（从 REALM_CONFIG 动态读取）。"""
     cfg = REALM_CONFIG.get(realm, {})
     return int(cfg.get("breakthrough_dao_yun_cost", 0))
 

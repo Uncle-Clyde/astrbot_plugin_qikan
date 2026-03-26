@@ -24,7 +24,7 @@ def create_router(
     guard_token: str = "",
     admin_account: str = "",
     admin_password: str = "",
-    command_prefix: str = "修仙",
+    command_prefix: str = "骑砍",
     api_rate_limit_1s_count: int = 10000,
 ) -> APIRouter:
     router = APIRouter()
@@ -267,7 +267,7 @@ def create_router(
 
     @router.post("/api/register")
     async def register(request: Request):
-        """注册新角色：道号 + 密码。"""
+        """注册新角色：角色名 + 密码。"""
         body = await request.json()
         auth_error = _check_web_password(body)
         if auth_error:
@@ -292,7 +292,7 @@ def create_router(
 
     @router.post("/api/login")
     async def login(request: Request):
-        """登录：道号 + 密码。"""
+        """登录：角色名 + 密码。"""
         body = await request.json()
         auth_error = _check_web_password(body)
         if auth_error:
@@ -303,7 +303,7 @@ def create_router(
         player = engine.verify_login(name, password)
         if not player:
             return JSONResponse(
-                {"success": False, "message": "道号或密码错误"},
+                {"success": False, "message": "角色名或密码错误"},
                 status_code=401,
             )
 
