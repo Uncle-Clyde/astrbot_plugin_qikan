@@ -1,11 +1,11 @@
 {
   "plugins": [
     {
-      "name": "astrbot_plugin_qiukan",
+      "name": "astrbot_plugin_qikan",
       "display_name": "骑砍英雄传",
-      "desc": "骑砍文字RPG游戏插件，支持聊天指令和网页游戏界面，包含骑砍风格技能系统",
-      "author": "qiukan-dev",
-      "repo": "https://github.com/linjianyan0229/astrbot_plugin_moniqikanyingxiongzhuan",
+      "desc": "骑砍风格文字RPG游戏插件，支持聊天指令和网页游戏界面，包含骑砍风格技能系统",
+      "author": "Uncle-Clyde",
+      "repo": "https://github.com/Uncle-Clyde/astrbot_plugin_qikan",
       "version": "v1.0.0",
       "tags": ["骑砍", "RPG", "游戏"],
       "support_platforms": ["aiocqhttp", "qq_official"]
