@@ -181,18 +181,29 @@ async def equip_item(player: Player, equip_id: str) -> dict:
 
 async def unequip_item(player: Player, slot: str) -> dict:
     """卸下指定槽位的装备，放回背包。"""
-    if slot not in ("weapon", "armor"):
+    valid_slots = ("weapon", "head", "body", "hands", "legs", "shoulders", "accessory1", "accessory2")
+    slot_names = {
+        "weapon": "武器",
+        "head": "头部",
+        "body": "护甲",
+        "hands": "手部",
+        "legs": "腿部",
+        "shoulders": "肩甲",
+        "accessory1": "饰品1",
+        "accessory2": "饰品2",
+    }
+    if slot not in valid_slots:
         return {"success": False, "message": "无效的装备槽位"}
 
     current = getattr(player, slot, "无")
     if current == "无" or current not in EQUIPMENT_REGISTRY:
-        slot_label = "武器" if slot == "weapon" else "护甲"
+        slot_label = slot_names.get(slot, slot)
         return {"success": False, "message": f"当前没有装备{slot_label}"}
 
     eq = EQUIPMENT_REGISTRY[current]
     player.inventory[current] = player.inventory.get(current, 0) + 1
     setattr(player, slot, "无")
-    slot_label = "武器" if slot == "weapon" else "护甲"
+    slot_label = slot_names.get(slot, slot)
     return {"success": True, "message": f"已卸下{slot_label}【{eq.name}】"}
 
 
@@ -384,7 +395,7 @@ def _calc_heart_method_convert_points(old_hm, old_mastery: int, old_exp: int, ne
 async def get_inventory_display(player: Player) -> list[dict]:
     """获取背包展示数据（含回收价格信息）。"""
     items = get_inventory_display_sync(player)
-    equipped = {player.weapon, player.armor}
+    equipped = {player.weapon, player.head, player.body, player.hands, player.legs, player.shoulders, player.accessory1, player.accessory2}
     for entry in items:
         iid = entry["item_id"]
         price = get_daily_recycle_price(iid)

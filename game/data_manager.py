@@ -34,7 +34,9 @@ _PLAYER_COLUMNS = [
     "hp", "max_hp", "attack", "defense", "spirit_stones",
     "lingqi", "permanent_max_hp_bonus", "permanent_attack_bonus",
     "permanent_defense_bonus", "permanent_lingqi_bonus",
-    "heart_method", "weapon", "gongfa_1", "gongfa_2", "gongfa_3", "armor", "dao_yun",
+    "heart_method", "weapon", "gongfa_1", "gongfa_2", "gongfa_3",
+    "head", "body", "hands", "legs", "shoulders", "accessory1", "accessory2",
+    "dao_yun",
     "breakthrough_bonus", "breakthrough_pill_count",
     "heart_method_mastery", "heart_method_exp", "heart_method_value", "stored_heart_methods",
     "gongfa_1_mastery", "gongfa_1_exp",
@@ -43,6 +45,7 @@ _PLAYER_COLUMNS = [
     "inventory", "active_buffs", "created_at", "last_cultivate_time",
     "last_checkin_date", "afk_cultivate_start", "afk_cultivate_end",
     "last_adventure_time", "death_count", "unified_msg_origin", "password_hash",
+    "level", "unallocated_points", "bandit_stats",
 ]
 
 
@@ -125,7 +128,13 @@ class DataManager:
                 gongfa_1            TEXT DEFAULT '无',
                 gongfa_2            TEXT DEFAULT '无',
                 gongfa_3            TEXT DEFAULT '无',
-                armor               TEXT DEFAULT '无',
+                head                TEXT DEFAULT '无',
+                body                TEXT DEFAULT '无',
+                hands               TEXT DEFAULT '无',
+                legs                TEXT DEFAULT '无',
+                shoulders           TEXT DEFAULT '无',
+                accessory1          TEXT DEFAULT '无',
+                accessory2          TEXT DEFAULT '无',
                 dao_yun             INTEGER DEFAULT 0,
                 breakthrough_bonus  REAL DEFAULT 0.0,
                 breakthrough_pill_count INTEGER DEFAULT 0,
@@ -407,8 +416,17 @@ class DataManager:
         await self._alter_add_column("players", "gongfa_1", "TEXT DEFAULT '无'")
         await self._alter_add_column("players", "gongfa_2", "TEXT DEFAULT '无'")
         await self._alter_add_column("players", "gongfa_3", "TEXT DEFAULT '无'")
-        await self._alter_add_column("players", "armor", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "body", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "head", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "hands", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "legs", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "shoulders", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "accessory1", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "accessory2", "TEXT DEFAULT '无'")
         await self._alter_add_column("players", "dao_yun", "INTEGER DEFAULT 0")
+        await self._alter_add_column("players", "level", "INTEGER DEFAULT 1")
+        await self._alter_add_column("players", "unallocated_points", "INTEGER DEFAULT 0")
+        await self._alter_add_column("players", "bandit_stats", "TEXT DEFAULT '{}'")
         await self._alter_add_column("players", "breakthrough_bonus", "REAL DEFAULT 0.0")
         await self._alter_add_column("players", "breakthrough_pill_count", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "heart_method_mastery", "INTEGER DEFAULT 0")
@@ -609,6 +627,9 @@ class DataManager:
         active_buffs = d.get("active_buffs_raw", d.get("active_buffs", []))
         if isinstance(active_buffs, list):
             active_buffs = json.dumps(active_buffs, ensure_ascii=False)
+        bandit_stats = d.get("bandit_stats", {})
+        if isinstance(bandit_stats, dict):
+            bandit_stats = json.dumps(bandit_stats, ensure_ascii=False)
         conn = db or self.db
         if conn is None:
             raise RuntimeError("数据库连接尚未初始化")
@@ -634,7 +655,13 @@ class DataManager:
             d.get("gongfa_1", "无"),
             d.get("gongfa_2", "无"),
             d.get("gongfa_3", "无"),
-            d.get("armor", "无"),
+            d.get("head", "无"),
+            d.get("body", "无"),
+            d.get("hands", "无"),
+            d.get("legs", "无"),
+            d.get("shoulders", "无"),
+            d.get("accessory1", "无"),
+            d.get("accessory2", "无"),
             d.get("dao_yun", 0),
             d.get("breakthrough_bonus", 0.0),
             d.get("breakthrough_pill_count", 0),
@@ -659,6 +686,9 @@ class DataManager:
             d.get("death_count", 0),
             d.get("unified_msg_origin"),
             d.get("password_hash"),
+            d.get("level", 1),
+            d.get("unallocated_points", 0),
+            bandit_stats,
         )
         placeholders = ", ".join(["?"] * len(_PLAYER_COLUMNS))
         cols = ", ".join(_PLAYER_COLUMNS)
@@ -692,6 +722,12 @@ class DataManager:
                 d["active_buffs_raw"] = loaded if isinstance(loaded, list) else []
             except (json.JSONDecodeError, TypeError):
                 d["active_buffs_raw"] = []
+        bandit_stats = d.get("bandit_stats", "{}")
+        if isinstance(bandit_stats, str):
+            try:
+                d["bandit_stats"] = json.loads(bandit_stats)
+            except (json.JSONDecodeError, TypeError):
+                d["bandit_stats"] = {}
         return d
 
     async def _alter_add_column(self, table: str, column: str, col_type: str):

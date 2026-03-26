@@ -660,10 +660,20 @@ class XiuxianPlugin(Star):
     @xiuxian_group.command("卸下")
     async def unequip_cmd(self, event: AstrMessageEvent, slot_name: str = ""):
         """卸下装备。"""
-        slot_map = {"武器": "weapon", "护甲": "armor"}
+        slot_map = {
+            "武器": "weapon",
+            "护甲": "body",
+            "头部": "head",
+            "手部": "hands",
+            "腿部": "legs",
+            "肩甲": "shoulders",
+            "饰品1": "accessory1",
+            "饰品2": "accessory2",
+        }
         slot = slot_map.get(slot_name.strip(), "")
         if not slot:
-            yield event.plain_result(f"请指定槽位：{self._cmd('卸下 武器')} 或 {self._cmd('卸下 护甲')}")
+            slots = " / ".join([self._cmd(f"卸下 {k}") for k in slot_map.keys()])
+            yield event.plain_result(f"请指定槽位：{slots}")
             return
         player_id = self._resolve_player_id(event)
         if not player_id:

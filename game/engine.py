@@ -2005,7 +2005,13 @@ class GameEngine:
         # 战落后重置征战冷却，允许重新出发
         player.last_adventure_time = 0.0
         player.weapon = "无"
-        player.armor = "无"
+        player.head = "无"
+        player.body = "无"
+        player.hands = "无"
+        player.legs = "无"
+        player.shoulders = "无"
+        player.accessory1 = "无"
+        player.accessory2 = "无"
         player.gongfa_1 = "无"
         player.gongfa_2 = "无"
         player.gongfa_3 = "无"
@@ -2072,19 +2078,22 @@ class GameEngine:
                         slot=eq.slot,
                     ))
 
-            # 已装备的护甲
-            if player.armor and player.armor != "无":
-                eq = EQUIPMENT_REGISTRY.get(player.armor)
-                if eq:
-                    items.append(make_snapshot_item(
-                        player.armor,
-                        "armor",
-                        name=eq.name,
-                        count=1,
-                        description=eq.description,
-                        tier_name=EQUIPMENT_TIER_NAMES.get(eq.tier, "未知"),
-                        slot=eq.slot,
-                    ))
+            # 已装备的所有装备
+            equip_slots = ["weapon", "head", "body", "hands", "legs", "shoulders", "accessory1", "accessory2"]
+            for slot in equip_slots:
+                equip_id = getattr(player, slot, "无")
+                if equip_id and equip_id != "无":
+                    eq = EQUIPMENT_REGISTRY.get(equip_id)
+                    if eq:
+                        items.append(make_snapshot_item(
+                            equip_id,
+                            "equipment",
+                            name=eq.name,
+                            count=1,
+                            description=eq.description,
+                            tier_name=EQUIPMENT_TIER_NAMES.get(eq.tier, "未知"),
+                            slot=eq.slot,
+                        ))
 
             # 已装备的战斗技能
             for gf_slot in ("gongfa_1", "gongfa_2", "gongfa_3"):

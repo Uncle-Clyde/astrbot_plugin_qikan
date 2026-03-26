@@ -43,7 +43,7 @@ class Player:
     gongfa_2: str = "无"     # 战斗技能二
     gongfa_3: str = "无"     # 战斗技能三
     head: str = "无"         # 头部
-    body: str = "无"         # 身体
+    body: str = "无"         # 身体/护甲
     hands: str = "无"       # 手部
     legs: str = "无"         # 腿部
     shoulders: str = "无"     # 肩甲
@@ -273,6 +273,9 @@ class Player:
                 "last_daily_reset": self.map_state.last_daily_reset,
             },
             "active_quests": list(self.active_quests),
+            "level": self.level,
+            "unallocated_points": self.unallocated_points,
+            "bandit_stats": dict(self.bandit_stats),
         }
         if include_sensitive:
             d["password_hash"] = self.password_hash
