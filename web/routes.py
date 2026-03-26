@@ -643,7 +643,7 @@ def create_router(
 
     @router.post("/api/admin/heart-methods/list")
     async def admin_list_heart_methods(request: Request):
-        """管理员接口：心法列表。"""
+        """管理员接口：被动技能列表。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -653,7 +653,7 @@ def create_router(
 
     @router.post("/api/admin/heart-methods/create")
     async def admin_create_heart_method(request: Request):
-        """管理员接口：新增心法。"""
+        """管理员接口：新增被动技能。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -668,7 +668,7 @@ def create_router(
 
     @router.post("/api/admin/heart-methods/update")
     async def admin_update_heart_method(request: Request):
-        """管理员接口：更新心法。"""
+        """管理员接口：更新被动技能。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -686,7 +686,7 @@ def create_router(
 
     @router.post("/api/admin/heart-methods/delete")
     async def admin_delete_heart_method(request: Request):
-        """管理员接口：删除心法。"""
+        """管理员接口：删除被动技能。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -697,10 +697,10 @@ def create_router(
             return JSONResponse(result, status_code=400)
         return result
 
-    # ── 功法管理 ────────────────────────────────────────────
+    # ── 战技管理 ────────────────────────────────────────────
     @router.post("/api/admin/gongfas/list")
     async def admin_list_gongfas(request: Request):
-        """管理员接口：功法列表。"""
+        """管理员接口：战技列表。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -710,7 +710,7 @@ def create_router(
 
     @router.post("/api/admin/gongfas/create")
     async def admin_create_gongfa(request: Request):
-        """管理员接口：新增功法。"""
+        """管理员接口：新增战技。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -725,7 +725,7 @@ def create_router(
 
     @router.post("/api/admin/gongfas/update")
     async def admin_update_gongfa(request: Request):
-        """管理员接口：更新功法。"""
+        """管理员接口：更新战技。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -743,7 +743,7 @@ def create_router(
 
     @router.post("/api/admin/gongfas/delete")
     async def admin_delete_gongfa(request: Request):
-        """管理员接口：删除功法。"""
+        """管理员接口：删除战技。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -754,17 +754,17 @@ def create_router(
             return JSONResponse(result, status_code=400)
         return result
 
-    # ---- 境界管理 CRUD ----
+    # ---- 爵位管理 CRUD ----
 
     @router.get("/api/realm-names")
     async def get_realm_names():
-        """公开接口：获取境界等级→名称映射。"""
+        """公开接口：获取爵位等级→名称映射。"""
         names = await engine.get_realm_names()
         return {"success": True, "realm_names": names}
 
     @router.post("/api/admin/realms/list")
     async def admin_list_realms(request: Request):
-        """管理员接口：境界配置列表。"""
+        """管理员接口：爵位配置列表。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -774,7 +774,7 @@ def create_router(
 
     @router.post("/api/admin/realms/create")
     async def admin_create_realm(request: Request):
-        """管理员接口：新增境界。"""
+        """管理员接口：新增爵位。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -789,7 +789,7 @@ def create_router(
 
     @router.post("/api/admin/realms/update")
     async def admin_update_realm(request: Request):
-        """管理员接口：更新境界配置。"""
+        """管理员接口：更新爵位配置。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):
@@ -808,7 +808,7 @@ def create_router(
 
     @router.post("/api/admin/realms/delete")
     async def admin_delete_realm(request: Request):
-        """管理员接口：删除境界。"""
+        """管理员接口：删除爵位。"""
         body = await request.json()
         admin_token = str(body.get("admin_token", ""))
         if not _verify_admin_token(admin_token):

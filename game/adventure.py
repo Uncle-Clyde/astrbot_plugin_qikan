@@ -90,7 +90,7 @@ async def attempt_adventure(player: Player, scene: dict, difficulty: str) -> dic
 
 
 def _resolve_enemy_realm(player_realm: int, difficulty: str) -> int:
-    """根据难度匹配敌方境界。"""
+    """根据难度匹配敌方爵位。"""
     current = get_nearest_realm_level(player_realm)
     min_enemy_realm = get_next_realm_level(RealmLevel.MORTAL)
     if min_enemy_realm is not None and current < min_enemy_realm:
@@ -251,7 +251,7 @@ async def _apply_pill(player: Player) -> str:
     if pill:
         await add_item(player, pill.pill_id)
         return pill.name
-    # fallback：旧丹药
+    # fallback：旧药剂
     weighted_items = []
     for item_id, weight in CHECKIN_PILL_WEIGHTS:
         if item_id in ITEM_REGISTRY and int(weight) > 0:
@@ -335,7 +335,7 @@ def _apply_injured(player: Player, result: dict, enemy_attack: int):
 
 
 def _drop_realm_steps(player: Player, steps: int) -> int:
-    """按层数连续跌境，跨越边界时自动跌落到上一大境界。"""
+    """按层数连续跌境，跨越边界时自动跌落到上一大爵位。"""
     dropped = 0
     target = max(1, int(steps))
     while dropped < target:
@@ -364,7 +364,7 @@ def _drop_realm_steps(player: Player, steps: int) -> int:
 
 
 def _rebuild_stats_by_realm(player: Player):
-    """根据当前(大境界/小境界)重建基础属性。"""
+    """根据当前(大爵位/小爵位)重建基础属性。"""
     if has_sub_realm(player.realm):
         player.sub_realm = max(0, min(get_max_sub_realm(player.realm), int(player.sub_realm)))
     else:

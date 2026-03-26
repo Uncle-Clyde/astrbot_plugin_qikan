@@ -43,7 +43,7 @@ ROLE_NAMES = {
     "disciple": "成员",
 }
 
-# ── 宗门仓库常量 ──────────────────────────────────────────
+# ── 家族仓库常量 ──────────────────────────────────────────
 WAREHOUSE_DEFAULT_CAPACITY = 200  # 默认仓库容量（格）
 
 # 物品品质分类键 → 默认上交贡献点 / 默认兑换贡献点
@@ -504,7 +504,7 @@ def get_item_quality_category(item_id: str) -> str:
     if eq:
         return f"equipment_{eq.tier}"
 
-    # 心法秘籍
+    # 被动技能秘籍
     hm_id = parse_heart_method_manual_id(item_id)
     if hm_id:
         hm = HEART_METHOD_REGISTRY.get(hm_id)
@@ -512,7 +512,7 @@ def get_item_quality_category(item_id: str) -> str:
             return f"heart_method_{hm.quality}"
         return "heart_method_0"
 
-    # 临时心法道具 → 与秘籍同级
+    # 临时被动技能道具 → 与秘籍同级
     stored_hm_id = parse_stored_heart_method_item_id(item_id)
     if stored_hm_id:
         hm = HEART_METHOD_REGISTRY.get(stored_hm_id)
@@ -520,7 +520,7 @@ def get_item_quality_category(item_id: str) -> str:
             return f"heart_method_{hm.quality}"
         return "heart_method_0"
 
-    # 功法卷轴
+    # 战技卷轴
     gf_id = parse_gongfa_scroll_id(item_id)
     if gf_id:
         gf = GONGFA_REGISTRY.get(gf_id)
@@ -556,7 +556,7 @@ async def get_submit_points(
     优先使用宗主设定的品质规则，否则用默认值。
     """
     category = get_item_quality_category(item_id)
-    # 查宗门对该品质的上交规则
+    # 查家族对该品质的上交规则
     configured = await dm.get_contribution_config_by_key(sect_id, "submit", category)
     if configured is not None:
         return configured
@@ -583,7 +583,7 @@ async def get_exchange_points(
     return DEFAULT_EXCHANGE_POINTS.get(category, 10)
 
 
-# ── 宗门仓库操作 ─────────────────────────────────────────
+# ── 家族仓库操作 ─────────────────────────────────────────
 
 async def warehouse_deposit(
     player: "Player",

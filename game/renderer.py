@@ -121,10 +121,10 @@ def render_panel(data: dict) -> bytes:
         ("生命", f"{data.get('hp', 0)}/{data.get('max_hp', 0)}"),
         ("攻击", str(total_atk)),
         ("防御", str(total_def)),
-        ("灵石", str(data.get("spirit_stones", 0))),
-        ("灵气", str(data.get("lingqi", 0))),
+        ("第纳尔", str(data.get("spirit_stones", 0))),
+        ("体力", str(data.get("lingqi", 0))),
         ("道韵", str(data.get("dao_yun", 0))),
-        ("心法值", str(data.get("heart_method_value", 0))),
+        ("被动技能值", str(data.get("heart_method_value", 0))),
     ]
     left_x = 30
     right_x = w // 2 + 8
@@ -146,12 +146,12 @@ def render_panel(data: dict) -> bytes:
             if equip_atk:
                 parts_atk.append(f"+装备{equip_atk}")
             if hm_atk:
-                parts_atk.append(f"+心法{hm_atk}")
+                parts_atk.append(f"+被动技能{hm_atk}")
             parts_def = [f"基础{base_def}"]
             if equip_def:
                 parts_def.append(f"+装备{equip_def}")
             if hm_def:
-                parts_def.append(f"+心法{hm_def}")
+                parts_def.append(f"+被动技能{hm_def}")
             detail_atk = " ".join(parts_atk)
             detail_def = " ".join(parts_def)
             draw.text((left_x + 4, start_y - 16), detail_atk, fill=ACCENT_GREEN, font=font_bonus)
@@ -164,7 +164,7 @@ def render_panel(data: dict) -> bytes:
     cfg_title_y = split_y + 12
     draw.text((30, cfg_title_y), "修行配置", fill=TEXT_SECONDARY, font=font_label)
     equip_rows = [
-        ("心法", _clip(data.get("heart_method_name", "无"), 14)),
+        ("被动技能", _clip(data.get("heart_method_name", "无"), 14)),
         ("武器", _clip(data.get("weapon_name", "无"), 14)),
         ("护甲", _clip(data.get("body_name", "无"), 14)),
         ("等级", str(data.get("level", 1))),
@@ -489,7 +489,7 @@ def render_adventure(data: dict) -> bytes:
     elif outcome == "realm_up":
         old_r = data.get("old_realm", "")
         new_r = data.get("new_realm", "")
-        draw.text((w // 2, y), "奇遇顿悟，爵位突破！", fill=ACCENT_CYAN, font=font_main, anchor="mt")
+        draw.text((w // 2, y), "奇遇顿悟，爵位晋升！", fill=ACCENT_CYAN, font=font_main, anchor="mt")
         draw.text((w // 2, y + 28), f"{old_r} → {new_r}", fill=ACCENT_GREEN, font=font_main, anchor="mt")
     elif outcome == "injured":
         dmg = data.get("damage", 0)
@@ -562,10 +562,10 @@ def render_scenes(scenes: list[dict]) -> bytes:
 _EFFECT_LABELS: dict[str, str] = {
     "heal_hp": "恢复生命",
     "exp_bonus": "获得经验",
-    "breakthrough_bonus": "突破成功率",
+    "breakthrough_bonus": "晋升成功率",
     "attack_boost": "永久攻击力",
     "prevent_death": "免除死亡",
-    "learn_heart_method": "领悟心法",
+    "learn_heart_method": "领悟被动技能",
 }
 
 # 物品类型显示名
@@ -573,8 +573,8 @@ _ITEM_TYPE_LABELS: dict[str, str] = {
     "consumable": "消耗品",
     "material": "材料",
     "equipment": "装备",
-    "heart_method": "心法",
-    "gongfa": "功法",
+    "heart_method": "被动技能",
+    "gongfa": "战技",
 }
 
 
@@ -645,7 +645,7 @@ def render_item_detail(data: dict) -> bytes:
     elif item_type == "heart_method":
         type_label = "技能书"
         rows.append(("品质", data.get("quality_name", "未知")))
-        rows.append(("对应境界", data.get("realm_name", "未知")))
+        rows.append(("对应爵位", data.get("realm_name", "未知")))
         if data.get("attack_bonus", 0):
             rows.append(("攻击加成", f"+{data['attack_bonus']}"))
         if data.get("defense_bonus", 0):

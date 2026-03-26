@@ -282,7 +282,7 @@ class ConnectionManager:
 def create_ws_router(
     engine: GameEngine,
     guard_token: str = "",
-    command_prefix: str = "修仙",
+    command_prefix: str = "骑砍",
     api_rate_limit_1s_count: int = 10000,
 ) -> APIRouter:
     router = APIRouter()
@@ -469,7 +469,7 @@ def create_ws_router(
                     except Exception:
                         pass
                     ws_logger.exception(
-                        "修仙世界：WS消息处理失败 user_id=%s msg_type=%s",
+                        "骑砍世界：WS消息处理失败 user_id=%s msg_type=%s",
                         user_id,
                         msg.get("type", ""),
                     )
@@ -487,7 +487,7 @@ def create_ws_router(
         except WebSocketDisconnect:
             pass
         except Exception:
-            ws_logger.exception("修仙世界：WebSocket会话异常 user_id=%s", user_id)
+            ws_logger.exception("骑砍世界：WebSocket会话异常 user_id=%s", user_id)
         finally:
             if user_id:
                 ws_manager.disconnect(user_id)
@@ -614,13 +614,13 @@ async def _broadcast_sect_changed(
     ws_manager: ConnectionManager | None,
     exclude_user_id: str | None = None,
 ):
-    """广播宗门数据变更，让在线前端自行刷新宗门相关面板。"""
+    """广播家族数据变更，让在线前端自行刷新家族相关面板。"""
     if not ws_manager:
         return
     try:
         await ws_manager.broadcast({"type": "sect_changed"}, exclude_user_id=exclude_user_id)
     except Exception:
-        ws_logger.exception("修仙世界：宗门变更广播失败")
+        ws_logger.exception("骑砍世界：家族变更广播失败")
 
 
 def _schedule_pvp_challenge_timeout(
@@ -649,7 +649,7 @@ async def _handle_message(
     engine: GameEngine,
     user_id: str,
     msg: dict,
-    command_prefix: str = "修仙",
+    command_prefix: str = "骑砍",
     ws_manager: ConnectionManager | None = None,
 ) -> dict | None:
     """处理客户端 WebSocket 消息。"""
@@ -760,7 +760,7 @@ async def _handle_message(
             "action": "learn_heart_method",
             "data": {
                 "success": False,
-                "message": "已取消直接选择心法，请通过历练掉落秘籍并在背包中使用。",
+                "message": "已取消直接选择被动技能，请通过历练掉落秘籍并在背包中使用。",
             },
         }
 
@@ -770,7 +770,7 @@ async def _handle_message(
             "data": {
                 "success": False,
                 "methods": [],
-                "message": "已取消直接选择心法，请通过历练掉落秘籍并在背包中使用。",
+                "message": "已取消直接选择被动技能，请通过历练掉落秘籍并在背包中使用。",
             },
         }
 
@@ -906,7 +906,7 @@ async def _handle_message(
         player = await engine.get_player(user_id)
         player_name = player.name if player else "未知"
         player_realm = get_realm_name(player.realm, player.sub_realm) if player else ""
-        # 获取宗门名
+        # 获取家族名
         sect_name = ""
         sect_role = ""
         sect_role_name = ""
@@ -945,7 +945,7 @@ async def _handle_message(
         result = await engine.confirm_death(user_id, kept_ids)
         return {"type": "action_result", "action": "death_confirm_keep", "data": result}
 
-    # ── 功法遗忘 ─────────────────────────────────────────
+    # ── 战技遗忘 ─────────────────────────────────────────
     elif msg_type == "forget_gongfa":
         slot = msg.get("data", {}).get("slot", "")
         result = await engine.forget_gongfa(user_id, slot)
@@ -1067,14 +1067,14 @@ async def _handle_message(
             return {"type": "pvp_state", "data": session.to_dict(user_id)}
         return {"type": "pvp_state", "data": None}
 
-    # ── 宗门系统 ─────────────────────────────────────────
+    # ── 家族系统 ─────────────────────────────────────────
 
     elif msg_type == "sect_create":
         data = msg.get("data", {})
         name = str(data.get("name", "")).strip()
         description = str(data.get("description", "")).strip()
         if not name:
-            return {"type": "error", "message": "请输入宗门名称"}
+            return {"type": "error", "message": "请输入家族名称"}
         result = await engine.sect_create(user_id, name, description)
         if result.get("success"):
             await _broadcast_sect_changed(ws_manager, exclude_user_id=user_id)
@@ -1096,14 +1096,14 @@ async def _handle_message(
     elif msg_type == "sect_detail":
         sect_id = msg.get("data", {}).get("sect_id", "")
         if not sect_id:
-            return {"type": "error", "message": "缺少宗门ID"}
+            return {"type": "error", "message": "缺少家族ID"}
         data = await engine.sect_detail(sect_id)
         return {"type": "sect_detail_data", "data": data}
 
     elif msg_type == "sect_join":
         sect_id = msg.get("data", {}).get("sect_id", "")
         if not sect_id:
-            return {"type": "error", "message": "缺少宗门ID"}
+            return {"type": "error", "message": "缺少家族ID"}
         result = await engine.sect_join(user_id, sect_id)
         if result.get("success"):
             await _broadcast_sect_changed(ws_manager, exclude_user_id=user_id)
@@ -1157,7 +1157,7 @@ async def _handle_message(
             await _broadcast_sect_changed(ws_manager, exclude_user_id=user_id)
         return {"type": "action_result", "action": "sect_disband", "data": result}
 
-    # ── 宗门仓库 ──────────────────────────────────────────
+    # ── 家族仓库 ──────────────────────────────────────────
 
     elif msg_type == "sect_warehouse_list":
         data = await engine.sect_warehouse_list(user_id)

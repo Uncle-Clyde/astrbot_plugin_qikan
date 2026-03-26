@@ -684,11 +684,11 @@ class XiuxianPlugin(Star):
 
     @xiuxian_group.command("查看")
     async def view_item(self, event: AstrMessageEvent, query_type: str = "", item_name: str = ""):
-        """按类型查看物品/装备/心法详情。"""
+        """按类型查看物品/装备/被动技能详情。"""
         query_type = query_type.strip()
         item_name = item_name.strip()
         if not query_type or not item_name:
-            yield event.plain_result(f"用法：{self._cmd('查看 装备 铁剑')} / {self._cmd('查看 心法 灭世雷诀秘籍')} / {self._cmd('查看 功法 基础剑法卷轴')}")
+            yield event.plain_result(f"用法：{self._cmd('查看 装备 铁剑')} / {self._cmd('查看 被动技能 灭世雷诀秘籍')} / {self._cmd('查看 战技 基础剑法卷轴')}")
             return
 
         type_map = {
@@ -715,7 +715,7 @@ class XiuxianPlugin(Star):
 
     @xiuxian_group.command("回收")
     async def recycle_cmd(self, event: AstrMessageEvent, args: str = ""):
-        """回收物品获取灵石。"""
+        """回收物品获取第纳尔。"""
         args = args.strip()
         if not args:
             yield event.plain_result(

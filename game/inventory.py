@@ -44,7 +44,7 @@ async def use_item(player: Player, item_id: str, count: int = 1) -> dict:
     if item.item_type not in ("consumable", "heart_method", "gongfa"):
         return {"success": False, "message": "该物品不可使用", "effect": None}
 
-    # 突破丹特殊检查：突破率100%时无法使用（支持新旧丹药）
+    # 晋升丹特殊检查：晋升率100%时无法使用（支持新旧药剂）
     if "breakthrough_bonus" in item.effect and "_temp_buff" not in item.effect:
         realm_cfg = REALM_CONFIG.get(player.realm, {})
         base_rate = realm_cfg.get("breakthrough_rate", 0.0)
@@ -53,17 +53,17 @@ async def use_item(player: Player, item_id: str, count: int = 1) -> dict:
         prepared_pill_bonus = pill_bonus if getattr(player, 'breakthrough_pill_count', 0) > 0 else 0.0
         current_rate = base_rate + accumulated_bonus + prepared_pill_bonus
         if current_rate >= 1.0:
-            return {"success": False, "message": "当前突破成功率已达100%，无需服用破境丹", "effect": None}
+            return {"success": False, "message": "当前晋升成功率已达100%，无需服用破境丹", "effect": None}
 
-    # 心法秘籍：使用前先做境界/重复修炼校验，避免误消耗
+    # 被动技能秘籍：使用前先做爵位/重复修炼校验，避免误消耗
     if "learn_heart_method" in item.effect:
         method_id = str(item.effect.get("learn_heart_method", ""))
         hm = HEART_METHOD_REGISTRY.get(method_id)
         if not hm:
-            return {"success": False, "message": "该心法秘籍数据异常", "effect": None}
+            return {"success": False, "message": "该被动技能秘籍数据异常", "effect": None}
         if hm.realm > player.realm:
-            realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知境界")
-            return {"success": False, "message": f"【{hm.name}】需达到{realm_name}方可修炼，当前境界不足", "effect": None}
+            realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知爵位")
+            return {"success": False, "message": f"【{hm.name}】需达到{realm_name}方可修炼，当前爵位不足", "effect": None}
         if player.heart_method == method_id:
             return {"success": False, "message": f"你已在修炼【{hm.name}】", "effect": None}
         old_hm = HEART_METHOD_REGISTRY.get(player.heart_method)
@@ -79,16 +79,16 @@ async def use_item(player: Player, item_id: str, count: int = 1) -> dict:
                 "new_method_id": method_id,
                 "new_method_name": hm.name,
                 "source_item_id": item_id,
-                "message": f"你当前修炼的【{old_hm.name}】已达{mastery_name}，是否转换为心法值？",
+                "message": f"你当前修炼的【{old_hm.name}】已达{mastery_name}，是否转换为被动技能值？",
                 "effect": None,
             }
 
-    # 功法卷轴：使用前校验空槽位和重复装备
+    # 战技卷轴：使用前校验空槽位和重复装备
     if "learn_gongfa" in item.effect:
         gongfa_id = str(item.effect.get("learn_gongfa", ""))
         gf = GONGFA_REGISTRY.get(gongfa_id)
         if not gf:
-            return {"success": False, "message": "该功法卷轴数据异常", "effect": None}
+            return {"success": False, "message": "该战技卷轴数据异常", "effect": None}
         # 检查是否已装备
         for slot in ("gongfa_1", "gongfa_2", "gongfa_3"):
             if getattr(player, slot, "无") == gongfa_id:
@@ -101,20 +101,20 @@ async def use_item(player: Player, item_id: str, count: int = 1) -> dict:
                 has_empty = True
                 break
         if not has_empty:
-            return {"success": False, "message": "功法槽位已满，请先遗忘一个功法", "effect": None}
+            return {"success": False, "message": "战技槽位已满，请先遗忘一个战技", "effect": None}
 
     stored_method_id = parse_stored_heart_method_item_id(item_id)
     if stored_method_id:
         player.stored_heart_methods.pop(stored_method_id, None)
 
-    # 批量使用仅支持突破丹类（含新旧）
+    # 批量使用仅支持晋升丹类（含新旧）
     is_breakthrough = "breakthrough_bonus" in item.effect and "_temp_buff" not in item.effect
     actual_count = count if is_breakthrough else 1
     player.inventory[item_id] -= actual_count
     if player.inventory[item_id] <= 0:
         del player.inventory[item_id]
 
-    # 临时buff类丹药走buff系统
+    # 临时buff类药剂走buff系统
     if item.effect.get("_temp_buff"):
         from .pills import apply_pill_buff
         effect_msg = apply_pill_buff(player, item_id)
@@ -139,10 +139,10 @@ async def equip_item(player: Player, equip_id: str) -> dict:
     if not eq:
         return {"success": False, "message": "无效的装备"}
 
-    # 境界限制
+    # 爵位限制
     if not can_equip(player.realm, eq.tier):
         tier_name = EQUIPMENT_TIER_NAMES.get(eq.tier, "未知")
-        return {"success": False, "message": f"当前境界无法装备{tier_name}·{eq.name}"}
+        return {"success": False, "message": f"当前爵位无法装备{tier_name}·{eq.name}"}
 
     slot = eq.slot  # "weapon" | "armor"
     current = getattr(player, slot, "无")
@@ -208,7 +208,7 @@ async def unequip_item(player: Player, slot: str) -> dict:
 
 
 async def recycle_item(player: Player, item_id: str, count: int = 1) -> dict:
-    """回收物品获取灵石。"""
+    """回收物品获取第纳尔。"""
     if count < 1:
         return {"success": False, "message": "回收数量至少为1"}
 
@@ -235,7 +235,7 @@ async def recycle_item(player: Player, item_id: str, count: int = 1) -> dict:
 
     return {
         "success": True,
-        "message": f"成功回收{count}个【{item.name}】，获得{earned}灵石（单价{unit_price}灵石）",
+        "message": f"成功回收{count}个【{item.name}】，获得{earned}第纳尔（单价{unit_price}第纳尔）",
         "earned": earned,
         "unit_price": unit_price,
         "item_name": item.name,
@@ -271,7 +271,7 @@ def _apply_effect(player: Player, effect: dict) -> str:
         boost = effect["lingqi_boost"]
         player.permanent_lingqi_bonus = getattr(player, "permanent_lingqi_bonus", 0) + boost
         player.lingqi = min(get_player_base_max_lingqi(player), player.lingqi + boost)
-        messages.append(f"灵气上限永久增加{boost}")
+        messages.append(f"体力上限永久增加{boost}")
     if "dao_yun_boost" in effect:
         boost = effect["dao_yun_boost"]
         player.dao_yun += boost
@@ -289,9 +289,9 @@ def _apply_effect(player: Player, effect: dict) -> str:
             if buff.get("side_effects"):
                 buff["side_effects"] = {}
         if cleared:
-            messages.append(f"清除了{cleared}个丹药副作用")
+            messages.append(f"清除了{cleared}个药剂副作用")
         else:
-            messages.append("当前无可清除的丹药副作用")
+            messages.append("当前无可清除的药剂副作用")
     if "learn_heart_method" in effect:
         method_id = str(effect["learn_heart_method"])
         hm = HEART_METHOD_REGISTRY.get(method_id)
@@ -319,29 +319,29 @@ def _apply_effect(player: Player, effect: dict) -> str:
 
             quality = HEART_METHOD_QUALITY_NAMES.get(hm.quality, "")
             if old_name and old_name != hm.name:
-                messages.append(f"领悟{quality}心法【{hm.name}】（重置并替换【{old_name}】进度）")
+                messages.append(f"领悟{quality}被动技能【{hm.name}】（重置并替换【{old_name}】进度）")
                 if convert_points > 0:
                     cap = max(1, int(hm.mastery_exp * 0.4))
                     messages.append(
-                        f"化功成功：转化{convert_points}心法值（上限{cap}），"
+                        f"化功成功：转化{convert_points}被动技能值（上限{cap}），"
                         f"当前进度{convert_points}/{hm.mastery_exp}"
                     )
                 elif old_mastery >= 2:
-                    messages.append("化功后未获得可用心法值")
+                    messages.append("化功后未获得可用被动技能值")
                 else:
                     old_mastery_name = MASTERY_LEVELS[min(old_mastery, len(MASTERY_LEVELS) - 1)]
-                    messages.append(f"原心法仅{old_mastery_name}，未达大成，无法转化心法值")
+                    messages.append(f"原被动技能仅{old_mastery_name}，未达大成，无法转化被动技能值")
             else:
-                messages.append(f"领悟{quality}心法【{hm.name}】（入门）")
+                messages.append(f"领悟{quality}被动技能【{hm.name}】（入门）")
             if absorbed_value > 0:
                 messages.append(
-                    f"吸收预存心法值{absorbed_value}，当前进度{player.heart_method_exp}/{hm.mastery_exp}"
-                    f"（剩余心法值{player.heart_method_value}）"
+                    f"吸收预存被动技能值{absorbed_value}，当前进度{player.heart_method_exp}/{hm.mastery_exp}"
+                    f"（剩余被动技能值{player.heart_method_value}）"
                 )
     if "breakthrough_bonus" in effect:
         bonus = effect["breakthrough_bonus"]
         player.breakthrough_pill_count = getattr(player, 'breakthrough_pill_count', 0) + 1
-        messages.append(f"服用破境丹，下次突破成功率+{int(bonus * 100)}%（已备{player.breakthrough_pill_count}颗）")
+        messages.append(f"服用破境丹，下次晋升成功率+{int(bonus * 100)}%（已备{player.breakthrough_pill_count}颗）")
     if "learn_gongfa" in effect:
         gongfa_id = str(effect["learn_gongfa"])
         gf = GONGFA_REGISTRY.get(gongfa_id)
@@ -355,26 +355,26 @@ def _apply_effect(player: Player, effect: dict) -> str:
                     setattr(player, f"{slot}_mastery", 0)
                     setattr(player, f"{slot}_exp", 0)
                     tier_name = GONGFA_TIER_NAMES.get(gf.tier, "未知")
-                    messages.append(f"习得{tier_name}功法【{gf.name}】（入门）")
+                    messages.append(f"习得{tier_name}战技【{gf.name}】（入门）")
                     placed = True
                     break
             if not placed:
-                messages.append("功法槽位已满")
+                messages.append("战技槽位已满")
     return "，".join(messages) if messages else ""
 
 
 def _apply_effect_batch(player: Player, effect: dict, count: int) -> str:
-    """批量应用物品效果（仅支持突破丹）。"""
+    """批量应用物品效果（仅支持晋升丹）。"""
     messages = []
     if "breakthrough_bonus" in effect:
         bonus = effect["breakthrough_bonus"]
         player.breakthrough_pill_count = getattr(player, 'breakthrough_pill_count', 0) + count
-        messages.append(f"服用{count}颗破境丹，下次突破成功率+{int(bonus * 100)}%（已备{player.breakthrough_pill_count}颗）")
+        messages.append(f"服用{count}颗破境丹，下次晋升成功率+{int(bonus * 100)}%（已备{player.breakthrough_pill_count}颗）")
     return "，".join(messages) if messages else ""
 
 
 def _calc_heart_method_convert_points(old_hm, old_mastery: int, old_exp: int, new_hm) -> int:
-    """将旧心法转为心法值，用于新心法进度。仅大成(2)及以上可转。"""
+    """将旧被动技能转为被动技能值，用于新被动技能进度。仅大成(2)及以上可转。"""
     if old_mastery < 2:
         return 0
 
@@ -387,7 +387,7 @@ def _calc_heart_method_convert_points(old_hm, old_mastery: int, old_exp: int, ne
     progress_bonus = int(getattr(old_hm, "mastery_exp", 0) * progress_ratio * (0.15 + 0.1 * int(getattr(old_hm, "quality", 0))))
     converted = max(0, base_points + progress_bonus)
 
-    # 转化上限：新心法首阶段 40%
+    # 转化上限：新被动技能首阶段 40%
     cap = max(1, int(getattr(new_hm, "mastery_exp", 1) * 0.4))
     return min(converted, cap)
 
@@ -430,7 +430,7 @@ def get_inventory_display_sync(player: Player) -> list[dict]:
             entry["defense"] = eq.defense
             entry["element"] = eq.element
             entry["element_damage"] = eq.element_damage
-        # 丹药品阶详情
+        # 药剂品阶详情
         pill = PILL_REGISTRY.get(item_id)
         if pill:
             entry["pill_tier"] = pill.tier
@@ -442,7 +442,7 @@ def get_inventory_display_sync(player: Player) -> list[dict]:
                 entry["duration"] = pill.duration
             if pill.side_effect_desc:
                 entry["side_effect_desc"] = pill.side_effect_desc
-        # 心法秘籍详情
+        # 被动技能秘籍详情
         hm_id = parse_heart_method_manual_id(item_id)
         if not hm_id:
             hm_id = parse_stored_heart_method_item_id(item_id)
@@ -451,13 +451,13 @@ def get_inventory_display_sync(player: Player) -> list[dict]:
             if hm:
                 entry["heart_method_quality"] = hm.quality
                 entry["quality_name"] = HEART_METHOD_QUALITY_NAMES.get(hm.quality, "普通")
-                realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知境界")
+                realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知爵位")
                 entry["realm_name"] = realm_name
                 entry["attack_bonus"] = hm.attack_bonus
                 entry["defense_bonus"] = hm.defense_bonus
                 entry["exp_multiplier"] = hm.exp_multiplier
                 entry["dao_yun_rate"] = hm.dao_yun_rate
-        # 功法卷轴详情
+        # 战技卷轴详情
         gf_id = parse_gongfa_scroll_id(item_id)
         if gf_id:
             gf = GONGFA_REGISTRY.get(gf_id)

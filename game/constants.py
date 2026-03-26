@@ -23,7 +23,7 @@ class RealmLevel(IntEnum):
     MAHAYANA = 8         # 伯爵
 
 
-# 有小境界的大境界范围
+# 有小爵位的大爵位范围
 SUB_REALM_MIN = RealmLevel.QI_REFINING
 SUB_REALM_MAX = RealmLevel.MAHAYANA
 MAX_SUB_REALM = 9  # 练气~元婴: 0=一层, 9=十层(圆满)
@@ -215,7 +215,7 @@ ITEM_REGISTRY: dict[str, ItemDef] = {
     ),
 }
 
-# ── 注册 200 种新丹药到 ITEM_REGISTRY ──
+# ── 注册 200 种新药剂到 ITEM_REGISTRY ──
 from .pills import get_pill_item_defs as _get_pill_item_defs  # noqa: E402
 ITEM_REGISTRY.update(_get_pill_item_defs())
 
@@ -785,12 +785,12 @@ def get_recycle_base_price(item_id: str) -> int | None:
             return max(lo, min(hi, int((eq.attack + eq.defense) * multiplier)))
         return 5
 
-    # 临时心法道具不可回收
+    # 临时被动技能道具不可回收
     stored_hm_id = parse_stored_heart_method_item_id(item_id)
     if stored_hm_id:
         return None
 
-    # 心法秘籍
+    # 被动技能秘籍
     hm_id = parse_heart_method_manual_id(item_id)
     if hm_id:
         hm = HEART_METHOD_REGISTRY.get(hm_id)
@@ -798,7 +798,7 @@ def get_recycle_base_price(item_id: str) -> int | None:
             return int(20 * (1 + hm.realm * 0.8))
         return 20
 
-    # 功法卷轴
+    # 战技卷轴
     gf_id = parse_gongfa_scroll_id(item_id)
     if gf_id:
         gf = GONGFA_REGISTRY.get(gf_id)
@@ -827,12 +827,12 @@ def get_daily_recycle_price(item_id: str, target_date: date | None = None) -> in
 
 
 def can_equip(realm: int, tier: int) -> bool:
-    """检查指定境界能否装备指定品阶的装备。超出预设上限的境界视为满足最高品阶要求。"""
+    """检查指定爵位能否装备指定品阶的装备。超出预设上限的爵位视为满足最高品阶要求。"""
     req = TIER_REALM_REQUIREMENTS.get(tier)
     if not req:
         return False
     min_r, max_r = req
-    # 境界超出预设范围时，只检查下限
+    # 爵位超出预设范围时，只检查下限
     if realm > max(v[1] for v in TIER_REALM_REQUIREMENTS.values()):
         return realm >= min_r
     return min_r <= realm <= max_r
@@ -1038,7 +1038,7 @@ _HM_MAHAYANA = [
     _hm("hm_maha_10", "天下共主", 8, 2, 0.35, 5000, 4000, 0.28, "成为天下共主", 30720),
 ]
 
-# 心法注册表
+# 被动技能注册表
 HEART_METHOD_REGISTRY: dict[str, HeartMethodDef] = {}
 for _hm_list in (
     _HM_MORTAL, _HM_QI_REFINING, _HM_FOUNDATION, _HM_GOLDEN_CORE,
@@ -1054,31 +1054,31 @@ STORED_HEART_METHOD_PREFIX = "stored_heart_manual_"
 
 
 def get_heart_method_manual_id(method_id: str) -> str:
-    """将心法ID转换为秘籍物品ID。"""
+    """将被动技能ID转换为秘籍物品ID。"""
     return f"{HEART_METHOD_MANUAL_PREFIX}{method_id}"
 
 
 def get_stored_heart_method_item_id(method_id: str) -> str:
-    """将临时保留心法ID转换为道具物品ID。"""
+    """将临时保留被动技能ID转换为道具物品ID。"""
     return f"{STORED_HEART_METHOD_PREFIX}{method_id}"
 
 
 def parse_heart_method_manual_id(item_id: str) -> str | None:
-    """从秘籍物品ID解析心法ID。"""
+    """从秘籍物品ID解析被动技能ID。"""
     if not item_id.startswith(HEART_METHOD_MANUAL_PREFIX):
         return None
     return item_id[len(HEART_METHOD_MANUAL_PREFIX):] or None
 
 
 def parse_stored_heart_method_item_id(item_id: str) -> str | None:
-    """从临时心法道具ID解析心法ID。"""
+    """从临时被动技能道具ID解析被动技能ID。"""
     if not item_id.startswith(STORED_HEART_METHOD_PREFIX):
         return None
     return item_id[len(STORED_HEART_METHOD_PREFIX):] or None
 
 
 def _refresh_heart_method_manual_items():
-    """根据当前 HEART_METHOD_REGISTRY 重新生成心法秘籍定义。
+    """根据当前 HEART_METHOD_REGISTRY 重新生成被动技能秘籍定义。
 
     采用先增后删策略，避免出现秘籍条目全部缺失的中间状态。
     """
@@ -1086,25 +1086,25 @@ def _refresh_heart_method_manual_items():
     for hm in HEART_METHOD_REGISTRY.values():
         manual_id = get_heart_method_manual_id(hm.method_id)
         stored_manual_id = get_stored_heart_method_item_id(hm.method_id)
-        realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知境界")
+        realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知爵位")
         quality_name = HEART_METHOD_QUALITY_NAMES.get(hm.quality, "普通")
         new_items[manual_id] = ItemDef(
             item_id=manual_id,
             name=f"{hm.name}秘籍",
             item_type="heart_method",
-            description=f"可领悟{quality_name}心法【{hm.name}】（{realm_name}）",
+            description=f"可领悟{quality_name}被动技能【{hm.name}】（{realm_name}）",
             effect={"learn_heart_method": hm.method_id},
         )
         new_items[stored_manual_id] = ItemDef(
             item_id=stored_manual_id,
             name=f"{hm.name}秘籍（临时）",
             item_type="heart_method",
-            description=f"保留的{quality_name}心法【{hm.name}】（{realm_name}），三日内有效，不可回收",
+            description=f"保留的{quality_name}被动技能【{hm.name}】（{realm_name}），三日内有效，不可回收",
             effect={"learn_heart_method": hm.method_id},
         )
     # 先写入新条目
     ITEM_REGISTRY.update(new_items)
-    # 再删除已不存在的旧心法秘籍条目
+    # 再删除已不存在的旧被动技能秘籍条目
     stale = [
         item_id for item_id in ITEM_REGISTRY
         if (item_id.startswith(HEART_METHOD_MANUAL_PREFIX) or item_id.startswith(STORED_HEART_METHOD_PREFIX))
@@ -1115,7 +1115,7 @@ def _refresh_heart_method_manual_items():
 
 
 def set_heart_method_registry(methods: dict[str, HeartMethodDef]):
-    """替换心法注册表（供数据库加载后同步到运行时）。
+    """替换被动技能注册表（供数据库加载后同步到运行时）。
 
     采用先增后删 + 写锁保护，避免读者看到空/半更新状态。
     """
@@ -1129,7 +1129,7 @@ def set_heart_method_registry(methods: dict[str, HeartMethodDef]):
 
 
 def get_heart_method_bonus(method_id: str, mastery: int) -> dict:
-    """计算心法加成（含修炼阶段倍率）。
+    """计算被动技能加成（含修炼阶段倍率）。
 
     Returns:
         {exp_multiplier, attack_bonus, defense_bonus, dao_yun_rate, mastery_name}
@@ -1152,7 +1152,7 @@ def get_heart_method_bonus(method_id: str, mastery: int) -> dict:
 
 
 def get_realm_heart_methods(realm: int) -> list[HeartMethodDef]:
-    """获取指定境界的所有心法。"""
+    """获取指定爵位的所有被动技能。"""
     return [hm for hm in HEART_METHOD_REGISTRY.values() if hm.realm == realm]
 
 
@@ -1177,7 +1177,7 @@ GONGFA_TIER_NAMES: dict[int, str] = {
     GongfaTier.TIAN: "大师级",
 }
 
-# 修炼熟练度所需最低境界（装备无限制）
+# 修炼熟练度所需最低爵位（装备无限制）
 GONGFA_TIER_REALM_REQ: dict[int, int] = {
     GongfaTier.HUANG: 0,   # 凡人即可修炼
     GongfaTier.XUAN: 1,    # 练气期
@@ -1188,7 +1188,7 @@ GONGFA_TIER_REALM_REQ: dict[int, int] = {
 
 @dataclass
 class GongfaDef:
-    """功法定义。"""
+    """战技定义。"""
     gongfa_id: str
     name: str
     tier: int             # GongfaTier
@@ -1200,11 +1200,11 @@ class GongfaDef:
     mastery_exp: int = 200
     dao_yun_cost: int = 0
     recycle_price: int = 1000
-    lingqi_cost: int = 0  # 战斗中施展功法消耗的灵气
+    lingqi_cost: int = 0  # 战斗中施展战技消耗的体力
 
 
 def calc_gongfa_lingqi_cost(tier: int, atk: int, dfn: int, hp_r: int, lq_r: int) -> int:
-    """根据功法品阶和属性计算施法耗灵。"""
+    """根据战技品阶和属性计算施法耗灵。"""
     tier_base = {0: 10, 1: 25, 2: 50, 3: 100}
     max_stat = max(int(atk), int(dfn), int(hp_r), int(lq_r))
     return int(tier_base.get(int(tier), 10) + max_stat * 0.5)
@@ -1214,7 +1214,7 @@ def _gf(gongfa_id: str, name: str, tier: int,
          atk: int, dfn: int, hp_r: int, lq_r: int,
          desc: str = "", mastery_exp: int = 200,
          dao_yun_cost: int = 0, recycle_price: int = 1000) -> GongfaDef:
-    """功法定义快捷构造。lingqi_cost 根据品阶和属性自动计算。"""
+    """战技定义快捷构造。lingqi_cost 根据品阶和属性自动计算。"""
     lingqi_cost = calc_gongfa_lingqi_cost(tier, atk, dfn, hp_r, lq_r)
     return GongfaDef(
         gongfa_id=gongfa_id, name=name, tier=tier,
@@ -1381,7 +1381,7 @@ _GF_DI: list[GongfaDef] = [
     _gf("gf_d_a01", "致命一击", 2, 180, 0, 0, 0, "给予敌人致命伤害", 1500, 50, 10000),
     _gf("gf_d_a02", "毁灭打击", 2, 160, 0, 0, 0, "毁灭性的打击", 1500, 60, 12000),
     # 单防 ×2
-    _gf("gf_d_d01", "绝对防御", 2, 0, 180, 0, 0, "绝对无法突破的防御", 1500, 50, 10000),
+    _gf("gf_d_d01", "绝对防御", 2, 0, 180, 0, 0, "绝对无法晋升的防御", 1500, 50, 10000),
     _gf("gf_d_d02", "钢铁城墙", 2, 0, 160, 0, 0, "如钢铁城墙般坚固", 1500, 60, 12000),
     # 单血 ×2
     _gf("gf_d_h01", "不屈生命", 2, 0, 0, 180, 0, "不屈不挠的生命力", 1500, 50, 10000),
@@ -1443,7 +1443,7 @@ _GF_TIAN: list[GongfaDef] = [
     _gf("gf_t_all01", "天下无敌", 3, 280, 260, 260, 260, "天下无敌的存在", 4000, 500, 60000),
 ]
 
-# 功法注册表
+# 战技注册表
 GONGFA_REGISTRY: dict[str, GongfaDef] = {}
 for _gf_list in (_GF_HUANG, _GF_XUAN, _GF_DI, _GF_TIAN):
     for _g in _gf_list:
@@ -1454,19 +1454,19 @@ GONGFA_SCROLL_PREFIX = "gongfa_scroll_"
 
 
 def get_gongfa_scroll_id(gongfa_id: str) -> str:
-    """将功法ID转换为卷轴物品ID。"""
+    """将战技ID转换为卷轴物品ID。"""
     return f"{GONGFA_SCROLL_PREFIX}{gongfa_id}"
 
 
 def parse_gongfa_scroll_id(item_id: str) -> str | None:
-    """从卷轴物品ID解析功法ID。"""
+    """从卷轴物品ID解析战技ID。"""
     if not item_id.startswith(GONGFA_SCROLL_PREFIX):
         return None
     return item_id[len(GONGFA_SCROLL_PREFIX):] or None
 
 
 def _refresh_gongfa_scroll_items():
-    """根据当前 GONGFA_REGISTRY 重新生成功法卷轴定义。
+    """根据当前 GONGFA_REGISTRY 重新生成战技卷轴定义。
 
     采用先增后删策略，避免出现卷轴条目全部缺失的中间状态。
     """
@@ -1488,12 +1488,12 @@ def _refresh_gongfa_scroll_items():
             item_id=scroll_id,
             name=f"{gf.name}卷轴",
             item_type="gongfa",
-            description=f"{tier_name}功法【{gf.name}】卷轴（{stat_str}）",
+            description=f"{tier_name}战技【{gf.name}】卷轴（{stat_str}）",
             effect={"learn_gongfa": gf.gongfa_id},
         )
     # 先写入新条目
     ITEM_REGISTRY.update(new_items)
-    # 再删除已不存在的旧功法卷轴条目
+    # 再删除已不存在的旧战技卷轴条目
     stale = [
         item_id for item_id in ITEM_REGISTRY
         if item_id.startswith(GONGFA_SCROLL_PREFIX) and item_id not in new_items
@@ -1503,7 +1503,7 @@ def _refresh_gongfa_scroll_items():
 
 
 def set_gongfa_registry(gongfas: dict[str, GongfaDef]):
-    """替换功法注册表（供数据库加载后同步到运行时）。
+    """替换战技注册表（供数据库加载后同步到运行时）。
 
     采用先增后删 + 写锁保护，避免读者看到空/半更新状态。
     """
@@ -1517,18 +1517,18 @@ def set_gongfa_registry(gongfas: dict[str, GongfaDef]):
 
 
 def can_learn_gongfa() -> bool:
-    """装备无限制，任何境界都能装备任何品阶的功法。"""
+    """装备无限制，任何爵位都能装备任何品阶的战技。"""
     return True
 
 
 def can_cultivate_gongfa(realm: int, tier: int) -> bool:
-    """检查境界是否满足修炼熟练度的要求。"""
+    """检查爵位是否满足修炼熟练度的要求。"""
     min_realm = GONGFA_TIER_REALM_REQ.get(tier, 0)
     return realm >= min_realm
 
 
 def get_gongfa_bonus(gongfa_id: str, mastery: int, realm: int) -> dict:
-    """计算功法加成（含境界缩放和精通倍率）。
+    """计算战技加成（含爵位缩放和精通倍率）。
 
     公式：effective = base * (1 + 0.1 * realm) * MASTERY_MULTIPLIERS[mastery]
 
@@ -1555,7 +1555,7 @@ def get_gongfa_bonus(gongfa_id: str, mastery: int, realm: int) -> dict:
 
 
 def get_total_gongfa_bonus(player) -> dict:
-    """汇总 3 个槽位的功法效果。"""
+    """汇总 3 个槽位的战技效果。"""
     total = {"attack_bonus": 0, "defense_bonus": 0, "hp_regen": 0, "lingqi_regen": 0}
     for slot in ("gongfa_1", "gongfa_2", "gongfa_3"):
         gongfa_id = getattr(player, slot, "无")
@@ -1574,24 +1574,24 @@ _refresh_gongfa_scroll_items()
 
 
 def set_realm_config(realms: dict[int, dict]):
-    """替换境界配置（供数据库加载后同步到运行时）。"""
+    """替换爵位配置（供数据库加载后同步到运行时）。"""
     REALM_CONFIG.clear()
     REALM_CONFIG.update(realms)
 
 
 def get_sorted_realm_levels() -> list[int]:
-    """按从低到高返回当前已配置的境界等级。"""
+    """按从低到高返回当前已配置的爵位等级。"""
     return sorted(int(level) for level in REALM_CONFIG.keys())
 
 
 def get_max_realm_level() -> int:
-    """获取当前配置的最大境界等级。"""
+    """获取当前配置的最大爵位等级。"""
     levels = get_sorted_realm_levels()
     return levels[-1] if levels else 0
 
 
 def get_next_realm_level(realm: int) -> int | None:
-    """获取比当前境界更高的下一个已配置境界。"""
+    """获取比当前爵位更高的下一个已配置爵位。"""
     current = int(realm)
     for level in get_sorted_realm_levels():
         if level > current:
@@ -1600,7 +1600,7 @@ def get_next_realm_level(realm: int) -> int | None:
 
 
 def get_previous_realm_level(realm: int) -> int | None:
-    """获取比当前境界更低的上一个已配置境界。"""
+    """获取比当前爵位更低的上一个已配置爵位。"""
     current = int(realm)
     prev = None
     for level in get_sorted_realm_levels():
@@ -1611,7 +1611,7 @@ def get_previous_realm_level(realm: int) -> int | None:
 
 
 def get_nearest_realm_level(realm: int) -> int:
-    """获取与给定等级最接近的已配置境界，优先回退到更低境界。"""
+    """获取与给定等级最接近的已配置爵位，优先回退到更低爵位。"""
     current = int(realm)
     if current in REALM_CONFIG:
         return current
@@ -1630,19 +1630,19 @@ def get_nearest_realm_level(realm: int) -> int:
 
 
 def has_sub_realm(realm: int) -> bool:
-    """该大境界是否有小境界。"""
+    """该大爵位是否有小爵位。"""
     cfg = REALM_CONFIG.get(realm)
     return bool(cfg and cfg.get("has_sub_realm"))
 
 
 def is_high_realm(realm: int) -> bool:
-    """是否为高阶大境界（化神~大乘，4层小境界）。"""
+    """是否为高阶大爵位（化神~大乘，4层小爵位）。"""
     cfg = REALM_CONFIG.get(realm)
     return bool(cfg and cfg.get("high_realm"))
 
 
 def get_max_sub_realm(realm: int) -> int:
-    """获取该大境界的最大小境界索引。"""
+    """获取该大爵位的最大小爵位索引。"""
     if is_high_realm(realm):
         return MAX_HIGH_SUB_REALM
     if has_sub_realm(realm):
@@ -1660,7 +1660,7 @@ def get_sub_realm_dao_yun_cost(realm: int, sub_realm: int) -> int:
 
 
 def get_breakthrough_dao_yun_cost(realm: int) -> int:
-    """获取从 realm 突破到 realm+1 所需道韵（从 REALM_CONFIG 动态读取）。"""
+    """获取从 realm 晋升到 realm+1 所需道韵（从 REALM_CONFIG 动态读取）。"""
     cfg = REALM_CONFIG.get(realm, {})
     return int(cfg.get("breakthrough_dao_yun_cost", 0))
 

@@ -155,7 +155,7 @@ class DataManager:
                 password_hash       TEXT
             )
         """)
-        # 境界配置表（管理员可维护）
+        # 爵位配置表（管理员可维护）
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS realms (
                 level             INTEGER PRIMARY KEY,
@@ -183,7 +183,7 @@ class DataManager:
                 description TEXT NOT NULL
             )
         """)
-        # 心法定义独立表（可在数据库中独立维护）
+        # 被动技能定义独立表（可在数据库中独立维护）
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS heart_methods (
                 method_id       TEXT PRIMARY KEY,
@@ -288,7 +288,7 @@ class DataManager:
                 updated_at TEXT NOT NULL
             )
         """)
-        # 功法定义独立表
+        # 战技定义独立表
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS gongfas (
                 gongfa_id     TEXT PRIMARY KEY,
@@ -324,7 +324,7 @@ class DataManager:
             CREATE INDEX IF NOT EXISTS idx_world_chat_created
             ON world_chat_messages (created_at)
         """)
-        # 宗门主表
+        # 家族主表
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS sects (
                 sect_id       TEXT PRIMARY KEY,
@@ -341,7 +341,7 @@ class DataManager:
                 warehouse_capacity INTEGER DEFAULT 200
             )
         """)
-        # 宗门成员关系表
+        # 家族成员关系表
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS sect_members (
                 user_id   TEXT PRIMARY KEY,
@@ -356,7 +356,7 @@ class DataManager:
             CREATE INDEX IF NOT EXISTS idx_sect_members_sect
             ON sect_members (sect_id)
         """)
-        # 宗门申请表（预留）
+        # 家族申请表（预留）
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS sect_applications (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -372,7 +372,7 @@ class DataManager:
             CREATE INDEX IF NOT EXISTS idx_sect_applications_sect
             ON sect_applications (sect_id, status)
         """)
-        # 宗门仓库表
+        # 家族仓库表
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS sect_warehouse (
                 sect_id   TEXT NOT NULL,
@@ -386,7 +386,7 @@ class DataManager:
             CREATE INDEX IF NOT EXISTS idx_sect_warehouse_sect
             ON sect_warehouse (sect_id)
         """)
-        # 宗门贡献点规则配置表
+        # 家族贡献点规则配置表
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS sect_contribution_config (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -445,20 +445,20 @@ class DataManager:
         await self._alter_add_column("world_chat_messages", "sect_role", "TEXT DEFAULT ''")
         await self._alter_add_column("world_chat_messages", "sect_role_name", "TEXT DEFAULT ''")
         await self._ensure_sect_schema(force=True)
-        # 境界表迁移：新增道韵字段
+        # 爵位表迁移：新增道韵字段
         await self._alter_add_column("realms", "sub_dao_yun_costs", "TEXT DEFAULT ''")
         await self._alter_add_column("realms", "breakthrough_dao_yun_cost", "INTEGER DEFAULT 0")
-        # 境界表首次创建时写入一份默认数据；之后完全以数据库内容为准
+        # 爵位表首次创建时写入一份默认数据；之后完全以数据库内容为准
         if not realms_table_exists:
             await self._seed_realms()
         await self._backfill_realm_dao_yun_defaults()
         # 填充场景数据
         await self._seed_adventure_scenes()
-        # 填充心法定义（仅补齐缺失，不覆盖已有配置）
+        # 填充被动技能定义（仅补齐缺失，不覆盖已有配置）
         await self._seed_heart_methods()
         # 填充装备定义（仅补齐缺失，不覆盖已有配置）
         await self._seed_weapons()
-        # 填充功法定义（仅补齐缺失，不覆盖已有配置）
+        # 填充战技定义（仅补齐缺失，不覆盖已有配置）
         await self._seed_gongfas()
         await self._sync_gongfa_lingqi_costs()
 
@@ -502,7 +502,7 @@ class DataManager:
         return players
 
     async def load_heart_methods(self) -> dict:
-        """加载启用的心法定义（独立表 -> 运行时）。"""
+        """加载启用的被动技能定义（独立表 -> 运行时）。"""
         from .constants import HEART_METHOD_REGISTRY, HeartMethodDef, HeartMethodQuality
 
         methods = {}
@@ -744,7 +744,7 @@ class DataManager:
                 logger.warning("添加列失败 %s.%s: %s", table, column, e)  # 列已存在
 
     async def _ensure_sect_schema(self, force: bool = False):
-        """确保宗门相关旧表已经自动升级到当前结构。"""
+        """确保家族相关旧表已经自动升级到当前结构。"""
         if self._sect_schema_checked and not force:
             return
         await self._alter_add_column("sects", "description", "TEXT DEFAULT ''")
@@ -771,7 +771,7 @@ class DataManager:
         self._sect_schema_checked = True
 
     async def _seed_realms(self):
-        """首次创建境界表时，写入一份内置默认境界。"""
+        """首次创建爵位表时，写入一份内置默认爵位。"""
         import json as _json
         from .constants import REALM_CONFIG as DEFAULT_REALM_CONFIG
 
@@ -835,7 +835,7 @@ class DataManager:
             await self.db.commit()
 
     async def load_realms(self) -> dict[int, dict]:
-        """加载境界配置（独立表 -> 运行时 REALM_CONFIG）。"""
+        """加载爵位配置（独立表 -> 运行时 REALM_CONFIG）。"""
         import json as _json
         from .constants import REALM_CONFIG as DEFAULT_REALM_CONFIG
 
@@ -982,7 +982,7 @@ class DataManager:
         return (cur.rowcount or 0) > 0
 
     async def get_realm_names(self) -> dict[int, str]:
-        """获取境界等级->名称映射（公开API用）。"""
+        """获取爵位等级->名称映射（公开API用）。"""
         result = {}
         async with self.db.execute(
             "SELECT level, name FROM realms ORDER BY level ASC"
@@ -1012,11 +1012,11 @@ class DataManager:
             # 秘境探险
             ("秘境探险", "上古遗迹", "断壁残垣中隐藏着远古秘宝"),
             ("秘境探险", "迷幻阵法", "虚实难辨，一步踏错万劫不复"),
-            ("秘境探险", "地下灵脉", "灵气汹涌的地底矿脉"),
+            ("秘境探险", "地下灵脉", "体力汹涌的地底矿脉"),
             ("秘境探险", "沉没宫殿", "水下宫殿中封印着未知力量"),
             ("秘境探险", "时空裂隙", "时空紊乱的裂缝中危机四伏"),
-            ("秘境探险", "藏经阁废墟", "残破典籍中暗藏逆天功法"),
-            ("秘境探险", "炼丹古洞", "古修士遗留的炼丹福地"),
+            ("秘境探险", "藏经阁废墟", "残破典籍中暗藏逆天战技"),
+            ("秘境探险", "配药古洞", "古修士遗留的配药福地"),
             ("秘境探险", "星辰迷宫", "星光指引下的层层考验"),
             ("秘境探险", "天机棋盘", "以命为棋，一局定生死"),
             ("秘境探险", "虚空秘境", "虚空中飘浮的远古修炼之地"),
@@ -1050,7 +1050,7 @@ class DataManager:
         await self.db.commit()
 
     async def _seed_heart_methods(self):
-        """若心法表为空或有缺失，按代码内置定义补齐。"""
+        """若被动技能表为空或有缺失，按代码内置定义补齐。"""
         from .constants import HEART_METHOD_REGISTRY
 
         existing = set()
@@ -1135,7 +1135,7 @@ class DataManager:
         await self.db.commit()
 
     async def _seed_gongfas(self):
-        """若功法表为空或有缺失，按代码内置定义补齐。"""
+        """若战技表为空或有缺失，按代码内置定义补齐。"""
         from .constants import GONGFA_REGISTRY
 
         existing = set()
@@ -1181,7 +1181,7 @@ class DataManager:
         await self.db.commit()
 
     async def _sync_gongfa_lingqi_costs(self):
-        """为旧数据补齐耗灵字段，避免重载后功法耗灵归零。"""
+        """为旧数据补齐耗灵字段，避免重载后战技耗灵归零。"""
         from .constants import calc_gongfa_lingqi_cost
 
         rows = []
@@ -1216,7 +1216,7 @@ class DataManager:
         await self.db.commit()
 
     async def load_gongfas(self) -> dict:
-        """加载启用的功法定义（独立表 -> 运行时）。"""
+        """加载启用的战技定义（独立表 -> 运行时）。"""
         from .constants import GONGFA_REGISTRY, GongfaDef, calc_gongfa_lingqi_cost
 
         gongfas = {}
@@ -1278,7 +1278,7 @@ class DataManager:
         return result
 
     async def admin_has_gongfa_name(self, name: str) -> bool:
-        """检查功法名称是否已存在（不区分大小写，忽略首尾空白）。"""
+        """检查战技名称是否已存在（不区分大小写，忽略首尾空白）。"""
         async with self.db.execute(
             """
             SELECT 1
@@ -1447,7 +1447,7 @@ class DataManager:
         await self.db.commit()
         return (cur.rowcount or 0) > 0
 
-    # ==================== 管理员 CRUD：心法 ====================
+    # ==================== 管理员 CRUD：被动技能 ====================
 
     async def admin_list_heart_methods(self) -> list[dict[str, Any]]:
         result = []
@@ -1464,7 +1464,7 @@ class DataManager:
         return result
 
     async def admin_has_heart_method_name(self, name: str) -> bool:
-        """检查心法名称是否已存在（不区分大小写，忽略首尾空白）。"""
+        """检查被动技能名称是否已存在（不区分大小写，忽略首尾空白）。"""
         async with self.db.execute(
             """
             SELECT 1
@@ -2183,10 +2183,10 @@ class DataManager:
         await self.db.commit()
         return cur.rowcount or 0
 
-    # ── 宗门 CRUD ──────────────────────────────────────────
+    # ── 家族 CRUD ──────────────────────────────────────────
 
     async def save_sect(self, sect: dict) -> None:
-        """新增宗门记录。"""
+        """新增家族记录。"""
         await self._ensure_sect_schema()
         await self.db.execute(
             """INSERT INTO sects
@@ -2210,7 +2210,7 @@ class DataManager:
         await self.db.commit()
 
     async def create_sect_with_leader(self, sect: dict, leader_user_id: str) -> None:
-        """原子创建宗门及宗主成员关系。"""
+        """原子创建家族及宗主成员关系。"""
         await self._ensure_sect_schema()
         try:
             await self.db.execute(
@@ -2243,14 +2243,14 @@ class DataManager:
             raise
 
     async def delete_sect(self, sect_id: str) -> None:
-        """删除宗门及其所有成员关系和申请记录。"""
+        """删除家族及其所有成员关系和申请记录。"""
         await self.db.execute("DELETE FROM sect_members WHERE sect_id = ?", (sect_id,))
         await self.db.execute("DELETE FROM sect_applications WHERE sect_id = ?", (sect_id,))
         await self.db.execute("DELETE FROM sects WHERE sect_id = ?", (sect_id,))
         await self.db.commit()
 
     async def load_sect(self, sect_id: str) -> dict | None:
-        """按 sect_id 加载宗门。"""
+        """按 sect_id 加载家族。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute("SELECT * FROM sects WHERE sect_id = ?", (sect_id,))
         row = await cur.fetchone()
@@ -2260,7 +2260,7 @@ class DataManager:
         return dict(zip(columns, row))
 
     async def load_sect_by_name(self, name: str) -> dict | None:
-        """按名称加载宗门。"""
+        """按名称加载家族。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute("SELECT * FROM sects WHERE name = ?", (name,))
         row = await cur.fetchone()
@@ -2270,7 +2270,7 @@ class DataManager:
         return dict(zip(columns, row))
 
     async def load_sects_page(self, page: int = 1, page_size: int = 10) -> dict:
-        """分页查询宗门列表（含成员计数）。"""
+        """分页查询家族列表（含成员计数）。"""
         await self._ensure_sect_schema()
         try:
             page = int(page)
@@ -2306,7 +2306,7 @@ class DataManager:
         }
 
     async def update_sect_info(self, sect_id: str, data: dict) -> None:
-        """更新宗门可变字段（description, join_policy, min_realm, announcement）。"""
+        """更新家族可变字段（description, join_policy, min_realm, announcement）。"""
         await self._ensure_sect_schema()
         allowed = {"description", "join_policy", "min_realm", "announcement"}
         sets = []
@@ -2325,7 +2325,7 @@ class DataManager:
         await self.db.commit()
 
     async def update_sect_leader(self, sect_id: str, new_leader_id: str) -> None:
-        """更新宗门宗主。"""
+        """更新家族宗主。"""
         await self._ensure_sect_schema()
         await self.db.execute(
             "UPDATE sects SET leader_id = ? WHERE sect_id = ?",
@@ -2333,10 +2333,10 @@ class DataManager:
         )
         await self.db.commit()
 
-    # ── 宗门成员 CRUD ──────────────────────────────────────
+    # ── 家族成员 CRUD ──────────────────────────────────────
 
     async def save_sect_member(self, user_id: str, sect_id: str, role: str = "disciple") -> None:
-        """添加宗门成员。"""
+        """添加家族成员。"""
         await self._ensure_sect_schema()
         import time as _time
         await self.db.execute(
@@ -2347,12 +2347,12 @@ class DataManager:
         await self.db.commit()
 
     async def delete_sect_member(self, user_id: str) -> None:
-        """移除宗门成员。"""
+        """移除家族成员。"""
         await self.db.execute("DELETE FROM sect_members WHERE user_id = ?", (user_id,))
         await self.db.commit()
 
     async def load_sect_members(self, sect_id: str) -> list[dict]:
-        """加载宗门所有成员（含玩家名、境界和贡献点）。"""
+        """加载家族所有成员（含玩家名、爵位和贡献点）。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             """SELECT m.user_id, m.role, m.joined_at, m.contribution_points,
@@ -2375,7 +2375,7 @@ class DataManager:
         return [dict(zip(columns, r)) for r in rows]
 
     async def load_player_sect(self, user_id: str) -> dict | None:
-        """查询玩家所在宗门（返回成员记录）。"""
+        """查询玩家所在家族（返回成员记录）。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT * FROM sect_members WHERE user_id = ?", (user_id,),
@@ -2387,7 +2387,7 @@ class DataManager:
         return dict(zip(columns, row))
 
     async def count_sect_members(self, sect_id: str) -> int:
-        """统计宗门成员数。"""
+        """统计家族成员数。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT COUNT(*) FROM sect_members WHERE sect_id = ?", (sect_id,),
@@ -2395,7 +2395,7 @@ class DataManager:
         return (await cur.fetchone())[0]
 
     async def count_members_by_role(self, sect_id: str, role: str) -> int:
-        """统计宗门某身份的成员数。"""
+        """统计家族某身份的成员数。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT COUNT(*) FROM sect_members WHERE sect_id = ? AND role = ?",
@@ -2412,10 +2412,10 @@ class DataManager:
         )
         await self.db.commit()
 
-    # ── 宗门仓库 ──────────────────────────────────────────
+    # ── 家族仓库 ──────────────────────────────────────────
 
     async def get_sect_warehouse(self, sect_id: str) -> list[dict]:
-        """获取宗门仓库所有物品。"""
+        """获取家族仓库所有物品。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT item_id, quantity FROM sect_warehouse WHERE sect_id = ? AND quantity > 0",
@@ -2425,7 +2425,7 @@ class DataManager:
         return [{"item_id": r[0], "quantity": r[1]} for r in rows]
 
     async def get_sect_warehouse_item(self, sect_id: str, item_id: str) -> int:
-        """获取宗门仓库中某物品数量。"""
+        """获取家族仓库中某物品数量。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT quantity FROM sect_warehouse WHERE sect_id = ? AND item_id = ?",
@@ -2435,7 +2435,7 @@ class DataManager:
         return row[0] if row else 0
 
     async def get_sect_warehouse_slot_count(self, sect_id: str) -> int:
-        """获取宗门仓库已使用格数（不同物品种类数）。"""
+        """获取家族仓库已使用格数（不同物品种类数）。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT COUNT(*) FROM sect_warehouse WHERE sect_id = ? AND quantity > 0",
@@ -2444,7 +2444,7 @@ class DataManager:
         return (await cur.fetchone())[0]
 
     async def add_sect_warehouse_item(self, sect_id: str, item_id: str, quantity: int) -> None:
-        """向宗门仓库添加物品。"""
+        """向家族仓库添加物品。"""
         await self._ensure_sect_schema()
         await self.db.execute(
             """INSERT INTO sect_warehouse (sect_id, item_id, quantity)
@@ -2455,7 +2455,7 @@ class DataManager:
         await self.db.commit()
 
     async def remove_sect_warehouse_item(self, sect_id: str, item_id: str, quantity: int) -> bool:
-        """从宗门仓库移除物品，返回是否成功。"""
+        """从家族仓库移除物品，返回是否成功。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT quantity FROM sect_warehouse WHERE sect_id = ? AND item_id = ?",
@@ -2479,7 +2479,7 @@ class DataManager:
         return True
 
     async def delete_sect_warehouse(self, sect_id: str) -> None:
-        """删除宗门仓库所有物品（解散宗门时调用）。"""
+        """删除家族仓库所有物品（解散家族时调用）。"""
         await self._ensure_sect_schema()
         await self.db.execute(
             "DELETE FROM sect_warehouse WHERE sect_id = ?", (sect_id,),
@@ -2534,7 +2534,7 @@ class DataManager:
                 (sect_id, item_id, quantity, quantity),
             )
 
-            # 加贡献点（校验成员仍在该宗门）
+            # 加贡献点（校验成员仍在该家族）
             cur_contrib = await conn.execute(
                 "UPDATE sect_members SET contribution_points = contribution_points + ? "
                 "WHERE user_id = ? AND sect_id = ?",
@@ -2617,10 +2617,10 @@ class DataManager:
             if conn is not None:
                 await conn.close()
 
-    # ── 宗门贡献点规则 ────────────────────────────────────
+    # ── 家族贡献点规则 ────────────────────────────────────
 
     async def get_contribution_config(self, sect_id: str) -> list[dict]:
-        """获取宗门全部贡献点规则。"""
+        """获取家族全部贡献点规则。"""
         await self._ensure_sect_schema()
         cur = await self.db.execute(
             "SELECT rule_type, target_key, points FROM sect_contribution_config WHERE sect_id = ?",
@@ -2666,7 +2666,7 @@ class DataManager:
         await self.db.commit()
 
     async def delete_all_contribution_config(self, sect_id: str) -> None:
-        """删除宗门所有贡献点规则（解散宗门时调用）。"""
+        """删除家族所有贡献点规则（解散家族时调用）。"""
         await self._ensure_sect_schema()
         await self.db.execute(
             "DELETE FROM sect_contribution_config WHERE sect_id = ?", (sect_id,),

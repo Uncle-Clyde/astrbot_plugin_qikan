@@ -104,7 +104,7 @@ async def engage_bandit(player, bandit_id: str) -> dict:
             from .player_level import LevelSystem
             level_results = LevelSystem.add_exp(player, exp_reward)
             
-            # 获得金币（灵石）
+            # 获得金币（第纳尔）
             player.spirit_stones += gold_reward
             
             # 随机战利品

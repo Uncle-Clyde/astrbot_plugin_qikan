@@ -147,7 +147,7 @@ class Player:
         acc1_eq = EQUIPMENT_REGISTRY.get(self.accessory1)
         acc2_eq = EQUIPMENT_REGISTRY.get(self.accessory2)
 
-        # 心法信息
+        # 被动技能信息
         hm = HEART_METHOD_REGISTRY.get(self.heart_method)
         hm_bonus = get_heart_method_bonus(self.heart_method, self.heart_method_mastery)
         if hm:
@@ -168,7 +168,7 @@ class Player:
             hm_info = None
             hm_display = "无"
 
-        # 功法信息
+        # 战技信息
         def _gongfa_info(slot: str) -> dict | None:
             gongfa_id = getattr(self, slot, "无")
             if not gongfa_id or gongfa_id == "无":
@@ -199,7 +199,7 @@ class Player:
 
         gongfa_total = get_total_gongfa_bonus(self)
 
-        # 丹药buff加成
+        # 药剂buff加成
         from .pills import get_buff_totals, get_active_buffs_display
         buff_totals = get_buff_totals(self)
 

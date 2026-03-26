@@ -142,7 +142,7 @@ class GameEngine:
                 normalized = True
             if clean_expired_buffs(player):
                 normalized = True
-            # 清理过期心法道具
+            # 清理过期被动技能道具
             if self._clean_expired_heart_methods(player):
                 normalized = True
             if self._clamp_player_hp(player):
@@ -753,7 +753,7 @@ class GameEngine:
     async def admin_create_heart_method(self, payload: dict) -> dict:
         method_id = str(payload.get("method_id", "")).strip()
         if not re.fullmatch(r"[a-z0-9_]{3,64}", method_id):
-            return {"success": False, "message": "心法ID仅支持3-64位小写字母/数字/下划线"}
+            return {"success": False, "message": "被动技能ID仅支持3-64位小写字母/数字/下划线"}
         data = {
             "method_id": method_id,
             "name": str(payload.get("name", "")).strip(),
@@ -768,26 +768,26 @@ class GameEngine:
             "enabled": self._normalize_enabled_flag(payload.get("enabled", 1)),
         }
         if not data["name"]:
-            return {"success": False, "message": "心法名称不能为空"}
+            return {"success": False, "message": "被动技能名称不能为空"}
         if data["realm"] not in REALM_CONFIG:
-            return {"success": False, "message": "境界值无效"}
+            return {"success": False, "message": "爵位值无效"}
         if data["quality"] not in {0, 1, 2}:
             return {"success": False, "message": "品质值无效"}
         if data["mastery_exp"] <= 0:
             return {"success": False, "message": "修炼阶段经验阈值必须大于0"}
         if await self._data_manager.admin_has_heart_method_name(data["name"]):
-            return {"success": False, "message": f"心法名称「{data['name']}」已存在，禁止重名"}
+            return {"success": False, "message": f"被动技能名称「{data['name']}」已存在，禁止重名"}
         ok = await self._data_manager.admin_create_heart_method(data)
         if not ok:
-            return {"success": False, "message": "心法ID已存在"}
+            return {"success": False, "message": "被动技能ID已存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "心法已新增"}
+        return {"success": True, "message": "被动技能已新增"}
 
     async def admin_update_heart_method(self, method_id: str, payload: dict) -> dict:
         method_id = str(method_id or "").strip()
         if not method_id:
-            return {"success": False, "message": "缺少心法ID"}
+            return {"success": False, "message": "缺少被动技能ID"}
         data = {
             "name": str(payload.get("name", "")).strip(),
             "realm": int(payload.get("realm", 0)),
@@ -801,30 +801,30 @@ class GameEngine:
             "enabled": self._normalize_enabled_flag(payload.get("enabled", 1)),
         }
         if not data["name"]:
-            return {"success": False, "message": "心法名称不能为空"}
+            return {"success": False, "message": "被动技能名称不能为空"}
         if data["realm"] not in REALM_CONFIG:
-            return {"success": False, "message": "境界值无效"}
+            return {"success": False, "message": "爵位值无效"}
         if data["quality"] not in {0, 1, 2}:
             return {"success": False, "message": "品质值无效"}
         if data["mastery_exp"] <= 0:
             return {"success": False, "message": "修炼阶段经验阈值必须大于0"}
         ok = await self._data_manager.admin_update_heart_method(method_id, data)
         if not ok:
-            return {"success": False, "message": "心法不存在"}
+            return {"success": False, "message": "被动技能不存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "心法已更新"}
+        return {"success": True, "message": "被动技能已更新"}
 
     async def admin_delete_heart_method(self, method_id: str) -> dict:
         method_id = str(method_id or "").strip()
         if not method_id:
-            return {"success": False, "message": "缺少心法ID"}
+            return {"success": False, "message": "缺少被动技能ID"}
         ok = await self._data_manager.admin_delete_heart_method(method_id)
         if not ok:
-            return {"success": False, "message": "心法不存在"}
+            return {"success": False, "message": "被动技能不存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "心法已删除"}
+        return {"success": True, "message": "被动技能已删除"}
 
     async def admin_list_gongfas(self) -> list[dict]:
         rows = await self._data_manager.admin_list_gongfas()
@@ -840,7 +840,7 @@ class GameEngine:
     async def admin_create_gongfa(self, payload: dict) -> dict:
         gongfa_id = str(payload.get("gongfa_id", "")).strip()
         if not re.fullmatch(r"[a-z0-9_]{3,64}", gongfa_id):
-            return {"success": False, "message": "功法ID仅支持3-64位小写字母/数字/下划线"}
+            return {"success": False, "message": "战技ID仅支持3-64位小写字母/数字/下划线"}
         data = {
             "gongfa_id": gongfa_id,
             "name": str(payload.get("name", "")).strip(),
@@ -857,7 +857,7 @@ class GameEngine:
             "enabled": self._normalize_enabled_flag(payload.get("enabled", 1)),
         }
         if not data["name"]:
-            return {"success": False, "message": "功法名称不能为空"}
+            return {"success": False, "message": "战技名称不能为空"}
         if data["tier"] not in {0, 1, 2, 3}:
             return {"success": False, "message": "品阶值无效（0-3）"}
         if data["mastery_exp"] <= 0:
@@ -871,18 +871,18 @@ class GameEngine:
                 data["lingqi_regen"],
             )
         if await self._data_manager.admin_has_gongfa_name(data["name"]):
-            return {"success": False, "message": f"功法名称「{data['name']}」已存在，禁止重名"}
+            return {"success": False, "message": f"战技名称「{data['name']}」已存在，禁止重名"}
         ok = await self._data_manager.admin_create_gongfa(data)
         if not ok:
-            return {"success": False, "message": "功法ID已存在"}
+            return {"success": False, "message": "战技ID已存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "功法已新增"}
+        return {"success": True, "message": "战技已新增"}
 
     async def admin_update_gongfa(self, gongfa_id: str, payload: dict) -> dict:
         gongfa_id = str(gongfa_id or "").strip()
         if not gongfa_id:
-            return {"success": False, "message": "缺少功法ID"}
+            return {"success": False, "message": "缺少战技ID"}
         data = {
             "name": str(payload.get("name", "")).strip(),
             "tier": int(payload.get("tier", 0)),
@@ -898,7 +898,7 @@ class GameEngine:
             "enabled": self._normalize_enabled_flag(payload.get("enabled", 1)),
         }
         if not data["name"]:
-            return {"success": False, "message": "功法名称不能为空"}
+            return {"success": False, "message": "战技名称不能为空"}
         if data["tier"] not in {0, 1, 2, 3}:
             return {"success": False, "message": "品阶值无效（0-3）"}
         if data["mastery_exp"] <= 0:
@@ -913,23 +913,23 @@ class GameEngine:
             )
         ok = await self._data_manager.admin_update_gongfa(gongfa_id, data)
         if not ok:
-            return {"success": False, "message": "功法不存在"}
+            return {"success": False, "message": "战技不存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "功法已更新"}
+        return {"success": True, "message": "战技已更新"}
 
     async def admin_delete_gongfa(self, gongfa_id: str) -> dict:
         gongfa_id = str(gongfa_id or "").strip()
         if not gongfa_id:
-            return {"success": False, "message": "缺少功法ID"}
+            return {"success": False, "message": "缺少战技ID"}
         ok = await self._data_manager.admin_delete_gongfa(gongfa_id)
         if not ok:
-            return {"success": False, "message": "功法不存在"}
+            return {"success": False, "message": "战技不存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "功法已删除"}
+        return {"success": True, "message": "战技已删除"}
 
-    # ---- 境界管理 CRUD ----
+    # ---- 爵位管理 CRUD ----
 
     async def admin_list_realms(self) -> list[dict]:
         return await self._data_manager.admin_list_realms()
@@ -938,14 +938,14 @@ class GameEngine:
         try:
             level = int(payload.get("level", -1))
         except (TypeError, ValueError):
-            return {"success": False, "message": "境界等级必须为整数"}
+            return {"success": False, "message": "爵位等级必须为整数"}
         if level < 0:
-            return {"success": False, "message": "境界等级不能为负数"}
+            return {"success": False, "message": "爵位等级不能为负数"}
         name = str(payload.get("name", "")).strip()
         if not name:
-            return {"success": False, "message": "境界名称不能为空"}
+            return {"success": False, "message": "爵位名称不能为空"}
         if await self._data_manager.admin_has_realm_name(name):
-            return {"success": False, "message": f"境界名称「{name}」已存在，禁止重名"}
+            return {"success": False, "message": f"爵位名称「{name}」已存在，禁止重名"}
         data = {
             "level": level,
             "name": name,
@@ -964,17 +964,17 @@ class GameEngine:
         }
         ok = await self._data_manager.admin_create_realm(data)
         if not ok:
-            return {"success": False, "message": f"境界等级 {level} 已存在"}
+            return {"success": False, "message": f"爵位等级 {level} 已存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "境界已新增"}
+        return {"success": True, "message": "爵位已新增"}
 
     async def admin_update_realm(self, level: int, payload: dict) -> dict:
         name = str(payload.get("name", "")).strip()
         if not name:
-            return {"success": False, "message": "境界名称不能为空"}
+            return {"success": False, "message": "爵位名称不能为空"}
         if await self._data_manager.admin_has_realm_name(name, exclude_level=level):
-            return {"success": False, "message": f"境界名称「{name}」已存在，禁止重名"}
+            return {"success": False, "message": f"爵位名称「{name}」已存在，禁止重名"}
         data = {
             "name": name,
             "has_sub_realm": self._normalize_enabled_flag(payload.get("has_sub_realm", 0)),
@@ -992,21 +992,21 @@ class GameEngine:
         }
         ok = await self._data_manager.admin_update_realm(level, data)
         if not ok:
-            return {"success": False, "message": "境界不存在"}
+            return {"success": False, "message": "爵位不存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "境界已更新"}
+        return {"success": True, "message": "爵位已更新"}
 
     async def admin_delete_realm(self, level: int) -> dict:
         ok = await self._data_manager.admin_delete_realm(level)
         if not ok:
-            return {"success": False, "message": "境界不存在"}
+            return {"success": False, "message": "爵位不存在"}
         await self._reload_runtime_registries()
         await self._normalize_players_after_registry_change()
-        return {"success": True, "message": "境界已删除"}
+        return {"success": True, "message": "爵位已删除"}
 
     async def get_realm_names(self) -> dict[int, str]:
-        """获取境界等级→名称映射。"""
+        """获取爵位等级→名称映射。"""
         return await self._data_manager.get_realm_names()
 
     async def admin_list_weapons(self) -> list[dict]:
@@ -1390,7 +1390,7 @@ class GameEngine:
         if len(matches) > 1:
             return {
                 "success": False,
-                "message": f"存在重名物品「{target_name}」，请使用：回收 装备/物品/心法/功法 {target_name} [数量]",
+                "message": f"存在重名物品「{target_name}」，请使用：回收 装备/物品/被动技能/战技 {target_name} [数量]",
             }
         return await self.recycle_action(user_id, matches[0], count)
 
@@ -1425,7 +1425,7 @@ class GameEngine:
             await self._save_player(player)
         return result
 
-    # ── 功法遗忘 ─────────────────────────────────────────
+    # ── 战技遗忘 ─────────────────────────────────────────
     async def forget_gongfa(self, user_id: str, slot: str) -> dict:
         """遗忘指定槽位的战斗技能，返回技能卷轴。slot: 'gongfa_1' | 'gongfa_2' | 'gongfa_3'。"""
         player = self._players.get(user_id)
@@ -1693,9 +1693,9 @@ class GameEngine:
     def get_item_detail(self, item_name: str, query_type: str | None = None) -> dict | None:
         """根据物品名查询物品详情（静态数据查询，不需要 player_id）。
 
-        支持三种类型：消耗品/材料、装备、心法秘籍。
+        支持三种类型：消耗品/材料、装备、被动技能秘籍。
         当出现重名条目时按优先级自动返回一个结果：
-        装备 > 心法秘籍 > 普通物品。
+        装备 > 被动技能秘籍 > 普通物品。
         """
         target_name = str(item_name or "").strip()
         if not target_name:
@@ -1726,7 +1726,7 @@ class GameEngine:
         for item in ITEM_REGISTRY.values():
             if item.name != target_name:
                 continue
-            # 检查是否是心法秘籍
+            # 检查是否是被动技能秘籍
             method_id = parse_heart_method_manual_id(item.item_id)
             if not method_id:
                 method_id = parse_stored_heart_method_item_id(item.item_id)
@@ -1735,7 +1735,7 @@ class GameEngine:
                 if hm:
                     if target_type and target_type != "heart_method":
                         continue
-                    realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知境界")
+                    realm_name = REALM_CONFIG.get(hm.realm, {}).get("name", "未知爵位")
                     candidates.append({
                         "type": "heart_method",
                         "name": item.name,
@@ -1748,7 +1748,7 @@ class GameEngine:
                         "description": hm.description,
                     })
                     continue
-            # 检查是否是功法卷轴
+            # 检查是否是战技卷轴
             gf_id = parse_gongfa_scroll_id(item.item_id)
             if gf_id:
                 gf = GONGFA_REGISTRY.get(gf_id)
@@ -1801,7 +1801,7 @@ class GameEngine:
 
     async def _save_player(self, player: Player):
         """保存玩家数据并通知 WebSocket。"""
-        # 兜底：若心法境界不符则自动卸下为秘籍，并结转60%心法值
+        # 兜底：若被动技能爵位不符则自动卸下为秘籍，并结转60%被动技能值
         self._auto_unequip_invalid_heart_method(player, convert_ratio=0.6, force=False)
         player.heart_method_value = max(0, int(getattr(player, "heart_method_value", 0)))
         self._clamp_player_hp(player)
@@ -1926,7 +1926,7 @@ class GameEngine:
                 logger.exception("战争大陆：定时清理集市过期商品异常")
 
     def _auto_unequip_invalid_equipment(self, player: Player) -> list[str]:
-        """自动卸下当前境界无法装备的物品并放回背包。"""
+        """自动卸下当前爵位无法装备的物品并放回背包。"""
         removed: list[str] = []
         for slot in ("weapon", "armor"):
             equip_id = getattr(player, slot, "无")
@@ -2133,7 +2133,7 @@ class GameEngine:
             return items
 
     async def confirm_death(self, user_id: str, kept_ids: list[str]) -> dict:
-        """校验 kept_ids ≤ 3，执行死亡重置后把保留的物品/装备/心法还给玩家。"""
+        """校验 kept_ids ≤ 3，执行死亡重置后把保留的物品/装备/被动技能还给玩家。"""
         async with self._get_player_lock(user_id):
             snapshot = self._pending_deaths.pop(user_id, None)
             if not snapshot:
@@ -2192,7 +2192,7 @@ class GameEngine:
                         setattr(player, f"{target_slot}_mastery", 0)
                         setattr(player, f"{target_slot}_exp", 0)
                 elif ktype in ("weapon", "armor"):
-                    # 装备放入背包（死亡后境界归零，可能无法穿戴）
+                    # 装备放入背包（死亡后爵位归零，可能无法穿戴）
                     player.inventory[item_id] = player.inventory.get(item_id, 0) + 1
                 else:
                     player.inventory[item_id] = player.inventory.get(item_id, 0) + ki.get("count", 1)
@@ -2662,7 +2662,7 @@ class GameEngine:
             }
         item_def = ITEM_REGISTRY.get(item_id)
         if item_def:
-            # 心法秘籍
+            # 被动技能秘籍
             hm_id = parse_heart_method_manual_id(item_id)
             if hm_id:
                 hm = HEART_METHOD_REGISTRY.get(hm_id)
@@ -2682,7 +2682,7 @@ class GameEngine:
                         "bonus": bonus,
                         "description": hm.description or item_def.description,
                     }
-            # 功法卷轴
+            # 战技卷轴
             gf_id = parse_gongfa_scroll_id(item_id)
             if gf_id:
                 gf = GONGFA_REGISTRY.get(gf_id)

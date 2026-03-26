@@ -46,7 +46,7 @@ PILL_GRADE_NAMES: dict[int, str] = {
 }
 
 
-# ═══════════════════════ 丹药定义 ═══════════════════════
+# ═══════════════════════ 药剂定义 ═══════════════════════
 
 @dataclass
 class PillDef:
@@ -75,7 +75,7 @@ _NAMES: dict[str, dict[int, str]] = {
     "dao_yun":        {0: "悟道药剂",   1: "明心药剂",   2: "通玄药剂",   3: "天道药剂",     4: "混元威名剂"},
     "exp":            {0: "聚灵散",   1: "明悟药剂",   2: "天悟药剂",   3: "造化药剂",     4: "太上造化剂"},
     "max_hp":         {0: "固本药剂",   1: "培元药剂",   2: "天元药剂",   3: "造化培元剂", 4: "混元固本剂"},
-    "breakthrough":   {0: "破障药剂",   1: "进阶药剂",   2: "天机药剂",   3: "造化突破剂", 4: "混元突破剂"},
+    "breakthrough":   {0: "破障药剂",   1: "进阶药剂",   2: "天机药剂",   3: "造化晋升剂", 4: "混元晋升剂"},
     # 限时型
     "temp_attack":    {0: "狂暴药剂",   1: "嗜血药剂",   2: "魔化药剂",   3: "天魔狂暴剂", 4: "太上狂暴剂"},
     "temp_defense":   {0: "铁壁药剂",   1: "龟甲药剂",   2: "玄武药剂",   3: "磐石药剂",     4: "混元铁壁剂"},
@@ -173,7 +173,7 @@ _SIDE_GRADE_MULT: dict[int, float] = {0: 1.0, 1: 0.5, 2: 0.0}
 # ═══════════════════════ 生成函数 ═══════════════════════
 
 def _generate_pills() -> dict[str, PillDef]:
-    """程序化生成 195 + 5 = 200 种丹药。"""
+    """程序化生成 195 + 5 = 200 种药剂。"""
     registry: dict[str, PillDef] = {}
 
     for cat, tmpl in _TEMPLATES.items():
@@ -202,7 +202,7 @@ def _generate_pills() -> dict[str, PillDef]:
 
                 # 描述
                 if tmpl.get("desc_fmt"):
-                    desc = f"突破成功率+{int(val * 100)}%"
+                    desc = f"晋升成功率+{int(val * 100)}%"
                 elif tmpl["key"] == "all_boost":
                     desc = f"限时增加攻防各{val}点，生命+{val * 2}"
                 else:
@@ -248,7 +248,7 @@ def _generate_pills() -> dict[str, PillDef]:
                     side_effect_desc=side_desc,
                 )
 
-    # ── 5 颗特殊丹药 ──
+    # ── 5 颗特殊药剂 ──
     _specials = [
         PillDef(
             "pill_special_nirvana", "涅槃圣剂", 4, 2, "special",
@@ -356,7 +356,7 @@ def get_buff_totals(player: Player) -> dict:
 
 
 def get_effective_combat_stats(player: Player) -> dict:
-    """计算应用丹药 buff 后的即时战斗属性。"""
+    """计算应用药剂 buff 后的即时战斗属性。"""
     from .constants import get_player_base_max_lingqi
 
     totals = get_buff_totals(player)
@@ -490,7 +490,7 @@ def pick_random_pill(
     grade_weights: dict[int, dict[int, int]],
     category_filter: set[str] | None = None,
 ) -> PillDef | None:
-    """根据权重随机选取一颗丹药。"""
+    """根据权重随机选取一颗药剂。"""
     tiers = list(tier_weights.keys())
     t_w = [tier_weights[t] for t in tiers]
     tier = rng.choices(tiers, weights=t_w, k=1)[0]

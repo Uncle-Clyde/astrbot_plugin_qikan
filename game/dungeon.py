@@ -599,7 +599,7 @@ class DungeonManager:
         roll = random.randint(1, 100)
 
         if roll <= DISASTER_OUTCOMES["hp_damage"]:
-            # 基于境界基础防御计算天灾伤害减免
+            # 基于爵位基础防御计算天灾伤害减免
             dmg_ratio = random.uniform(0.15, 0.35)
             min_ratio = random.uniform(0.01, 0.03)
             fallback_realm = get_nearest_realm_level(RealmLevel.MORTAL)
@@ -745,7 +745,7 @@ class DungeonManager:
             cumulative += prob
             if roll < cumulative:
                 if tier_scale == "realm_up":
-                    # 高1大境界
+                    # 高1大爵位
                     current_realm = get_nearest_realm_level(player.realm)
                     enemy_realm = get_next_realm_level(current_realm) or current_realm
                     fallback_realm = get_nearest_realm_level(RealmLevel.QI_REFINING)
@@ -1085,7 +1085,7 @@ class DungeonManager:
 
     @staticmethod
     def _sync_player_from_combat(player: Player, combat: CombatState):
-        """把战斗中的实时生命/灵气同步回玩家。"""
+        """把战斗中的实时生命/体力同步回玩家。"""
         base_max_lingqi = get_player_base_max_lingqi(player)
         hp_delta = combat.player_max_hp - player.max_hp
         lingqi_delta = combat.player_max_lingqi - base_max_lingqi

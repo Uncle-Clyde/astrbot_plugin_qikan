@@ -979,7 +979,7 @@ class PvPManager:
         *,
         skip_save_user_ids: Optional[set[str]] = None,
     ):
-        """同步双方血量 / 灵气到玩家对象，并按需持久化。"""
+        """同步双方血量 / 体力到玩家对象，并按需持久化。"""
         skip_save_user_ids = skip_save_user_ids or set()
         self._sync_player_state(player_a, session.state_a)
         self._sync_player_state(player_b, session.state_b)

@@ -1,4 +1,4 @@
-# astrbot_plugin_qiukan
+# astrbot_plugin_qikan
 
 骑砍英雄传（AstrBot 插件），提供聊天指令 + Web 双端玩法，包含战争、训练、突破、签到、挂机、历练、装备、家族、世界频道、排行榜、管理员面板等功能。
 
@@ -9,8 +9,8 @@
 | 当前版本 | `v1.0.0` |
 | Web UI 版本 | `2.0.0` |
 | 技能系统 | `骑砍风格技能树` |
-| 插件标识 | `astrbot_plugin_qiukan` |
-| 数据存储 | `SQLite`（`data/plugin_data/astrbot_plugin_qiukan/xiuxian.db`） |
+| 插件标识 | `astrbot_plugin_qikan` |
+| 数据存储 | `SQLite`（`data/plugin_data/astrbot_plugin_qikan/xiuxian.db`） |
 
 ## 功能概览
 
