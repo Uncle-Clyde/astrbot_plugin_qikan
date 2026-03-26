@@ -1,0 +1,128 @@
+{
+  "web_access_password": {
+    "description": "Web访问密码",
+    "type": "string",
+    "default": "",
+    "hint": "网页登录/注册前必须输入；留空则不校验访问密码"
+  },
+  "web_guard_token": {
+    "description": "Web接口保护令牌",
+    "type": "string",
+    "default": "",
+    "hint": "用于签发页面级访问凭证；浏览器打开页面后自动注入，留空则关闭该保护"
+  },
+  "web_admin_account": {
+    "description": "Web管理员账号",
+    "type": "string",
+    "default": "admin",
+    "hint": "用于管理员登录按钮，不与玩家账号绑定"
+  },
+  "web_admin_password": {
+    "description": "Web管理员密码",
+    "type": "string",
+    "default": "",
+    "hint": "用于管理员登录按钮；建议与访问密码不同"
+  },
+  "master_account": {
+    "description": "主人称号（兼容旧配置）",
+    "type": "string",
+    "default": "",
+    "hint": "若未设置 web_admin_account，将回退使用此项"
+  },
+  "web_port": {
+    "description": "Web游戏服务器端口",
+    "type": "int",
+    "default": 8099,
+    "hint": "骑砍英雄传网页版的HTTP端口号"
+  },
+  "web_host": {
+    "description": "Web服务器监听地址",
+    "type": "string",
+    "default": "0.0.0.0",
+    "hint": "默认0.0.0.0监听所有网络接口"
+  },
+  "cultivate_cooldown": {
+    "description": "训练冷却时间(秒)",
+    "type": "int",
+    "default": 60,
+    "hint": "两次训练之间的最短间隔"
+  },
+  "checkin_stones_min": {
+    "description": "签到第纳尔奖励最小值",
+    "type": "int",
+    "default": 20,
+    "hint": "签到随机第纳尔奖励的下限（会随爵位提升而放大）"
+  },
+  "checkin_stones_max": {
+    "description": "签到第纳尔奖励最大值",
+    "type": "int",
+    "default": 300,
+    "hint": "签到随机第纳尔奖励的上限（会随爵位提升而放大）"
+  },
+  "checkin_exp_min": {
+    "description": "签到经验奖励最小值",
+    "type": "int",
+    "default": 500,
+    "hint": "签到随机经验奖励的下限（会随爵位提升而放大）"
+  },
+  "checkin_exp_max": {
+    "description": "签到经验奖励最大值",
+    "type": "int",
+    "default": 5000,
+    "hint": "签到随机经验奖励的上限（会随爵位提升而放大）"
+  },
+  "checkin_stones_with_pill_min": {
+    "description": "签到第纳尔+药剂时第纳尔最小值",
+    "type": "int",
+    "default": 10,
+    "hint": "签到获得药剂时附带第纳尔的下限"
+  },
+  "checkin_stones_with_pill_max": {
+    "description": "签到第纳尔+药剂时第纳尔最大值",
+    "type": "int",
+    "default": 100,
+    "hint": "签到获得药剂时附带第纳尔的上限"
+  },
+  "checkin_prob_stones": {
+    "description": "签到获得纯第纳尔的概率(%)",
+    "type": "int",
+    "default": 60,
+    "hint": "0-100之间的整数，三种签到结果概率之和应为100"
+  },
+  "checkin_prob_exp": {
+    "description": "签到获得纯经验的概率(%)",
+    "type": "int",
+    "default": 25,
+    "hint": "0-100之间的整数，剩余概率为第纳尔+药剂"
+  },
+  "afk_cultivate_max_minutes": {
+    "description": "挂机训练最大时长(分钟)",
+    "type": "int",
+    "default": 60,
+    "hint": "玩家单次挂机训练的最大分钟数"
+  },
+  "adventure_cooldown": {
+    "description": "征战冷却时间(秒)",
+    "type": "int",
+    "default": 1800,
+    "hint": "两次征战之间的最短间隔（默认1800秒=30分钟）"
+  },
+  "api_rate_limit_1s_count": {
+    "description": "HTTP/WS 1秒内限流阈值",
+    "type": "int",
+    "default": 10000,
+    "hint": "HTTP接口与WebSocket消息1秒内超过该次数将触发限流，默认10000"
+  },
+  "enable_web": {
+    "description": "启用Web游戏界面",
+    "type": "bool",
+    "default": false,
+    "hint": "默认关闭以降低启动风险；开启前请确认已安装 fastapi/uvicorn 依赖"
+  },
+  "web_link_message": {
+    "description": "web指令自定义回复内容",
+    "type": "string",
+    "default": "骑砍英雄传网页版：http://< 服务器IP>:{port}\n在浏览器中打开即可游玩",
+    "hint": "输入\"骑砍 web\"时的回复文本，可用 {port} 占位符代表端口号"
+  }
+}
