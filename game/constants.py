@@ -291,6 +291,8 @@ class EquipmentDef:
     hp: int = 0       # 生命值加成
     special_effect: str = ""  # 特殊效果(仅史诗/传说)
     description: str = ""
+    element: str = "无"  # 元素属性（保留字段）
+    element_damage: int = 0  # 元素伤害（保留字段）
 
 
 # ══════════════════════════════════════════════════════════════
