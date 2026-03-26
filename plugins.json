@@ -6,7 +6,7 @@
       "desc": "骑砍风格文字RPG游戏插件，支持聊天指令和网页游戏界面，包含骑砍风格技能系统",
       "author": "Uncle-Clyde",
       "repo": "https://github.com/Uncle-Clyde/astrbot_plugin_qikan",
-      "version": "v1.0.0",
+      "version": "v0.1.21",
       "tags": ["骑砍", "RPG", "游戏"],
       "support_platforms": ["aiocqhttp", "qq_official"]
     }
