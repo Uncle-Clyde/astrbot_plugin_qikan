@@ -14,7 +14,7 @@ const showDetail = ref(false)
 onMounted(async () => {
   store.setupMessageHandlers()
   
-  const wsBase = (window as any).__XIUXIAN_WS_BASE__ || window.location.origin
+  const wsBase = (window as any).__QIKAN_WS_BASE__ || window.location.origin
   wsUrl.value = wsBase.replace(/^http/, 'ws') + '/ws'
   
   try {
