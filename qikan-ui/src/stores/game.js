@@ -47,15 +47,21 @@ export const useGameStore = defineStore('game', {
 
   actions: {
     async login(name, password, adminKey = '') {
-      const res = await api.post('/api/login', { name, password, admin_key: adminKey })
-      if (res.success) {
-        this.token = res.token
-        localStorage.setItem('qikan_token', res.token)
-        await this.connectWs()
-        return true
+      try {
+        const res = await api.post('/api/login', { name, password, admin_key: adminKey })
+        if (res.success) {
+          this.token = res.token
+          localStorage.setItem('qikan_token', res.token)
+          await this.connectWs()
+          await new Promise(resolve => setTimeout(resolve, 500))
+          return true
+        }
+        ElMessage.error(res.message)
+        return false
+      } catch (err) {
+        ElMessage.error('登录失败: ' + (err.message || '网络错误'))
+        return false
       }
-      ElMessage.error(res.message)
-      return false
     },
 
     async register(name, password, accessPassword = '') {
@@ -69,7 +75,7 @@ export const useGameStore = defineStore('game', {
     },
 
     connectWs() {
-      if (this.ws) return
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) return
       
       const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
       const wsUrl = `${protocol}//${location.host}/ws`
@@ -77,18 +83,35 @@ export const useGameStore = defineStore('game', {
 
       this.ws.onopen = () => {
         this.connected = true
-        this.send({ type: 'auth', token: this.token })
+        if (this.token) {
+          setTimeout(() => {
+            this.send({ type: 'auth', token: this.token })
+          }, 100)
+        }
       }
 
       this.ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data)
-        this.handleWsMessage(msg)
+        try {
+          const msg = JSON.parse(e.data)
+          this.handleWsMessage(msg)
+        } catch (err) {
+          console.error('WebSocket消息解析失败:', err)
+        }
+      }
+
+      this.ws.onerror = (err) => {
+        console.error('WebSocket错误:', err)
+        ElMessage.error('连接不稳定，正在重连...')
       }
 
       this.ws.onclose = () => {
         this.connected = false
         this.ws = null
-        setTimeout(() => this.connectWs(), 3000)
+        setTimeout(() => {
+          if (this.token) {
+            this.connectWs()
+          }
+        }, 3000)
       }
     },
 
@@ -113,6 +136,16 @@ export const useGameStore = defineStore('game', {
         case 'rankings_data':
           this.rankings = msg.data
           break
+        case 'action_result':
+          if (msg.data?.success) {
+            ElMessage.success(msg.data.message || '操作成功')
+          } else {
+            ElMessage.error(msg.data?.message || '操作失败')
+          }
+          break
+        case 'error':
+          ElMessage.error(msg.message || '发生错误')
+          break
       }
     },
 
@@ -136,25 +169,21 @@ export const useGameStore = defineStore('game', {
       this.send({ type: 'unequip', data: { slot } })
     },
 
-    async startAfk() {
-      const res = await api.post('/api/start-afk')
-      ElMessage.info(res.message)
+    startAfk() {
+      this.send({ type: 'start_afk', data: { minutes: 60 } })
     },
 
-    async collectAfk() {
-      const res = await api.post('/api/collect-afk')
-      ElMessage.info(res.message)
-      this.getPanel()
+    collectAfk() {
+      this.send({ type: 'collect_afk' })
+      setTimeout(() => this.getPanel(), 500)
     },
 
-    async checkin() {
-      const res = await api.post('/api/checkin')
-      ElMessage.info(res.message)
+    checkin() {
+      this.send({ type: 'checkin' })
     },
 
-    async adventure() {
-      const res = await api.post('/api/adventure')
-      ElMessage.info(res.message)
+    adventure() {
+      this.send({ type: 'adventure' })
     },
 
     async getRankings() {
