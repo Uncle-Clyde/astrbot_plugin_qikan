@@ -16,7 +16,7 @@ from ..game.sect import ROLE_NAMES
 from ..game import mb_skills
 from .access_guard import get_access_guard
 
-ws_logger = logging.getLogger("xiuxian.websocket")
+ws_logger = logging.getLogger("qikan.websocket")
 
 RANKINGS_PUSH_DELAY = 0.6
 MARKET_PUSH_DELAY = 0.4
@@ -266,7 +266,7 @@ class ConnectionManager:
 
     async def _chat_cleanup_loop(self):
         """每隔一段时间清理超过1个月的世界频道消息。"""
-        logger = logging.getLogger("xiuxian.world_chat")
+        logger = logging.getLogger("qikan.world_chat")
         while True:
             try:
                 await asyncio.sleep(WORLD_CHAT_CLEANUP_INTERVAL)
@@ -347,7 +347,7 @@ def create_ws_router(
         try:
             client_ip = _client_ip_from_ws(websocket)
             client_ua = str(websocket.headers.get("user-agent", "")).strip().lower()
-            client_page_key = str(websocket.cookies.get("xiuxian_page_client", "")).strip()
+            client_page_key = str(websocket.cookies.get("qikan_page_client", "")).strip()
             ok, reason = access_guard.check_ws_connect(
                 ip=client_ip,
                 limit=ws_conn_limit,

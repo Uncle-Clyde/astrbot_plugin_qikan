@@ -106,12 +106,12 @@ def create_router(
         ua = str(request.headers.get("user-agent", "")).strip().lower()
         ok, reason = access_guard.validate_page_session(
             secret=required_guard_token,
-            page_id=request.headers.get("x-xiuxian-page-id", ""),
-            issued_at=request.headers.get("x-xiuxian-page-ts", ""),
-            signature=request.headers.get("x-xiuxian-page-sign", ""),
+            page_id=request.headers.get("x-qikan-page-id", ""),
+            issued_at=request.headers.get("x-qikan-page-ts", ""),
+            signature=request.headers.get("x-qikan-page-sign", ""),
             ip=ip,
             ua=ua,
-            client_key=request.cookies.get("xiuxian_page_client", ""),
+            client_key=request.cookies.get("qikan_page_client", ""),
         )
         if not ok:
             raise HTTPException(status_code=403, detail=reason or "页面凭证无效，请刷新页面")
@@ -182,7 +182,7 @@ def create_router(
         """提供游戏主页。"""
         html = (static_dir / "index.html").read_text(encoding="utf-8")
         page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
-        page_client_id = str(request.cookies.get("xiuxian_page_client", "")).strip()
+        page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
         if not page_client_id:
             page_client_id = secrets.token_hex(16)
         if required_guard_token:
@@ -203,7 +203,7 @@ def create_router(
         html = re.sub(r'(<script\b)', f'{bootstrap}\n    \\1', html, count=1)
         response = HTMLResponse(html)
         response.set_cookie(
-            key="xiuxian_page_client",
+            key="qikan_page_client",
             value=page_client_id,
             max_age=30 * 24 * 3600,
             httponly=True,
@@ -216,7 +216,7 @@ def create_router(
         """提供技能树页面。"""
         html = (static_dir / "skills" / "index.html").read_text(encoding="utf-8")
         page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
-        page_client_id = str(request.cookies.get("xiuxian_page_client", "")).strip()
+        page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
         if not page_client_id:
             page_client_id = secrets.token_hex(16)
         if required_guard_token:
@@ -243,7 +243,7 @@ def create_router(
         html = re.sub(r'(<script\b)', f'{bootstrap}\n    \\1', html, count=1)
         response = HTMLResponse(html)
         response.set_cookie(
-            key="xiuxian_page_client",
+            key="qikan_page_client",
             value=page_client_id,
             max_age=30 * 24 * 3600,
             httponly=True,
@@ -256,7 +256,7 @@ def create_router(
         """提供卡拉迪亚大陆地图页面。"""
         html = (static_dir / "map" / "index.html").read_text(encoding="utf-8")
         page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
-        page_client_id = str(request.cookies.get("xiuxian_page_client", "")).strip()
+        page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
         if not page_client_id:
             page_client_id = secrets.token_hex(16)
         if required_guard_token:
@@ -283,7 +283,7 @@ def create_router(
         html = re.sub(r'(<script\b)', f'{bootstrap}\n    \\1', html, count=1)
         response = HTMLResponse(html)
         response.set_cookie(
-            key="xiuxian_page_client",
+            key="qikan_page_client",
             value=page_client_id,
             max_age=30 * 24 * 3600,
             httponly=True,

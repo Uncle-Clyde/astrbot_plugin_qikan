@@ -54,7 +54,7 @@ class DataManager:
 
     def __init__(self, data_dir: str):
         self._data_dir = data_dir
-        self._db_path = os.path.join(data_dir, "xiuxian.db")
+        self._db_path = os.path.join(data_dir, "qikan.db")
         self.db: Optional[aiosqlite.Connection] = None
         self._shop_purchase_lock = asyncio.Lock()
         self._sect_schema_checked = False

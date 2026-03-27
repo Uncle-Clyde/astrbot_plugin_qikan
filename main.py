@@ -102,7 +102,7 @@ class XiuxianPlugin(Star):
             return None
 
         cache_dir = self._image_cache_dir or os.path.join(
-            "data", "plugin_data", "astrbot_plugin_xiuxian", "render_cache"
+            "data", "plugin_data", "astrbot_plugin_qikan", "render_cache"
         )
         try:
             os.makedirs(cache_dir, exist_ok=True)
@@ -138,7 +138,7 @@ class XiuxianPlugin(Star):
     async def initialize(self):
         """插件初始化：加载数据、启动游戏引擎和 Web 服务。"""
         # 数据目录
-        data_dir = os.path.join("data", "plugin_data", "astrbot_plugin_xiuxian")
+        data_dir = os.path.join("data", "plugin_data", "astrbot_plugin_qikan")
         self._image_cache_dir = os.path.join(data_dir, "render_cache")
         os.makedirs(self._image_cache_dir, exist_ok=True)
         data_manager = DataManager(data_dir)
