@@ -754,6 +754,25 @@ async def _handle_message(
         result = await engine.unequip_action(user_id, slot)
         return {"type": "action_result", "action": "unequip", "data": result}
 
+    elif msg_type == "equip_mount":
+        mount_id = msg.get("data", {}).get("mount_id", "")
+        result = await engine.equip_mount_action(user_id, mount_id)
+        return {"type": "action_result", "action": "equip_mount", "data": result}
+
+    elif msg_type == "unequip_mount":
+        result = await engine.unequip_mount_action(user_id)
+        return {"type": "action_result", "action": "unequip_mount", "data": result}
+
+    elif msg_type == "equip_mount_item":
+        equip_id = msg.get("data", {}).get("equip_id", "")
+        result = await engine.equip_mount_item_action(user_id, equip_id)
+        return {"type": "action_result", "action": "equip_mount_item", "data": result}
+
+    elif msg_type == "unequip_mount_item":
+        slot = msg.get("data", {}).get("slot", "")
+        result = await engine.unequip_mount_item_action(user_id, slot)
+        return {"type": "action_result", "action": "unequip_mount_item", "data": result}
+
     elif msg_type == "learn_heart_method":
         return {
             "type": "action_result",

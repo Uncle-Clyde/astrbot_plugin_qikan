@@ -14,6 +14,9 @@ from .constants import (
     RealmLevel, get_heart_method_bonus,
     get_gongfa_bonus, get_total_gongfa_bonus, get_realm_name,
     get_player_base_max_lingqi,
+    MOUNT_SLOTS, MOUNT_SLOT_NAMES,
+    MOUNT_REGISTRY, MOUNT_EQUIPMENT_REGISTRY,
+    MOUNT_TIER_NAMES, MOUNT_TYPE_NAMES, get_mount_bonus,
 )
 
 from .map_system import PlayerMapState
@@ -49,6 +52,12 @@ class Player:
     shoulders: str = "无"     # 肩甲
     accessory1: str = "无"   # 饰品1
     accessory2: str = "无"   # 饰品2
+    
+    # 坐骑系统
+    mount: str = "无"           # 坐骑
+    mount_armor: str = "无"      # 马甲
+    mount_weapon: str = "无"     # 马战武器
+    horse_armament: str = "无"  # 马具
     dao_yun: int = 0         # 声望
     breakthrough_bonus: float = 0.0  # 升级失败累积加成（最高0.2）
     breakthrough_pill_count: int = 0  # 已使用的晋级证书数量
@@ -203,6 +212,55 @@ class Player:
 
         gongfa_total = get_total_gongfa_bonus(self)
 
+        # 坐骑信息辅助
+        def _get_mount_info() -> dict | None:
+            mount_id = getattr(self, "mount", "无")
+            if not mount_id or mount_id == "无":
+                return None
+            mt = MOUNT_REGISTRY.get(mount_id)
+            if not mt:
+                return None
+            return {
+                "mount_id": mt.mount_id,
+                "name": mt.name,
+                "tier": mt.tier,
+                "tier_name": MOUNT_TIER_NAMES.get(mt.tier, "未知"),
+                "mount_type": mt.mount_type,
+                "mount_type_name": MOUNT_TYPE_NAMES.get(mt.mount_type, "未知"),
+                "speed_bonus": mt.speed_bonus,
+                "attack_bonus": mt.attack_bonus,
+                "defense_bonus": mt.defense_bonus,
+                "hp_bonus": mt.hp_bonus,
+                "capacity": mt.capacity,
+                "description": mt.description,
+            }
+
+        def _get_mount_equipped_items() -> dict:
+            result = {}
+            for slot in MOUNT_SLOTS:
+                if slot == "mount":
+                    continue
+                item_id = getattr(self, slot, "无")
+                if item_id and item_id != "无":
+                    me = MOUNT_EQUIPMENT_REGISTRY.get(item_id)
+                    if me:
+                        result[slot] = {
+                            "equip_id": me.equip_id,
+                            "name": me.name,
+                            "tier": me.tier,
+                            "tier_name": EQUIPMENT_TIER_NAMES.get(me.tier, "未知"),
+                            "slot": me.slot,
+                            "slot_name": MOUNT_SLOT_NAMES.get(me.slot, "未知"),
+                            "speed_bonus": me.speed_bonus,
+                            "defense_bonus": me.defense_bonus,
+                            "hp_bonus": me.hp_bonus,
+                            "special_effect": me.special_effect,
+                            "description": me.description,
+                        }
+                else:
+                    result[slot] = None
+            return result
+
         # 药剂buff加成
         from .pills import get_buff_totals, get_active_buffs_display
         buff_totals = get_buff_totals(self)
@@ -227,6 +285,11 @@ class Player:
             "equip_bonus": equip_bonus,
             "equipped_items": equipped_items,
             "gongfa_bonus": gongfa_total,
+            "mount_bonus": get_mount_bonus(self),
+            "mounted": self.mount != "无",
+            "equipped_mount": self.mount,
+            "equipped_mount_info": _get_mount_info(),
+            "equipped_mount_items": _get_mount_equipped_items(),
             "spirit_stones": self.spirit_stones,
             "lingqi": self.lingqi,
             "max_lingqi": get_player_base_max_lingqi(self),
@@ -336,6 +399,10 @@ class Player:
             shoulders=data.get("shoulders", "无"),
             accessory1=data.get("accessory1", "无"),
             accessory2=data.get("accessory2", "无"),
+            mount=data.get("mount", "无"),
+            mount_armor=data.get("mount_armor", "无"),
+            mount_weapon=data.get("mount_weapon", "无"),
+            horse_armament=data.get("horse_armament", "无"),
             dao_yun=data.get("dao_yun", 0),
             breakthrough_bonus=data.get("breakthrough_bonus", 0.0),
             breakthrough_pill_count=data.get("breakthrough_pill_count", 0),

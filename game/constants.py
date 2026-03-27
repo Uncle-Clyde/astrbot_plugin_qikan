@@ -269,6 +269,83 @@ EQUIPMENT_SLOT_NAMES: dict[str, str] = {
     "accessory2": "饰品",
 }
 
+MOUNT_SLOTS = [
+    "mount",           # 坐骑
+    "mount_armor",     # 马甲
+    "mount_weapon",    # 马战武器
+    "horse_armament",   # 马具
+]
+
+MOUNT_SLOT_NAMES: dict[str, str] = {
+    "mount": "坐骑",
+    "mount_armor": "马甲",
+    "mount_weapon": "马战武器",
+    "horse_armament": "马具",
+}
+
+class MountTier(IntEnum):
+    """坐骑品阶。"""
+    COMMON = 1      # 普通
+    FINE = 2        # 精良
+    RARE = 3        # 稀有
+    EPIC = 4        # 史诗
+    LEGENDARY = 5   # 传说
+
+MOUNT_TIER_NAMES: dict[int, str] = {
+    MountTier.COMMON: "普通",
+    MountTier.FINE: "精良",
+    MountTier.RARE: "稀有",
+    MountTier.EPIC: "史诗",
+    MountTier.LEGENDARY: "传说",
+}
+
+MOUNT_TYPES = [
+    "horse",        # 马
+    "war_horse",    # 战马
+    "destrier",     # 冲锋马
+    "pony",         # 矮马
+    "camel",        # 骆驼
+    "armored_horse",# 铁甲马
+]
+
+MOUNT_TYPE_NAMES: dict[str, str] = {
+    "horse": "马",
+    "war_horse": "战马",
+    "destrier": "冲锋马",
+    "pony": "矮马",
+    "camel": "骆驼",
+    "armored_horse": "铁甲马",
+}
+
+@dataclass
+class MountDef:
+    """坐骑定义。"""
+    mount_id: str
+    name: str
+    tier: int           # MountTier
+    mount_type: str     # mount_type
+    speed_bonus: int = 0    # 移动速度加成
+    attack_bonus: int = 0   # 骑乘攻击加成
+    defense_bonus: int = 0  # 骑乘防御加成
+    hp_bonus: int = 0       # 生命值加成
+    capacity: int = 0       # 负重容量
+    description: str = ""
+
+
+@dataclass
+class MountEquipmentDef:
+    """坐骑装备定义。"""
+    equip_id: str
+    name: str
+    tier: int           # EquipmentTier
+    slot: str           # mount slot
+    speed_bonus: int = 0
+    attack_bonus: int = 0
+    defense_bonus: int = 0
+    hp_bonus: int = 0
+    special_effect: str = ""
+    description: str = ""
+
 # 装备品阶 → 可装备的等级范围 (min_realm, max_realm)
 TIER_REALM_REQUIREMENTS: dict[int, tuple[int, int]] = {
     EquipmentTier.COMMON: (RealmLevel.MORTAL, RealmLevel.FOUNDATION),
@@ -740,13 +817,115 @@ def set_equipment_registry(equipments: dict[str, EquipmentDef]):
         _refresh_equipment_items()
 
 
-_refresh_equipment_items()
+# ── 坐骑注册表 ────────────────────────────────────────────────
+
+MOUNT_REGISTRY: dict[str, MountDef] = {}
+
+_MOUNT_COMMON: list[MountDef] = [
+    MountDef("common_pony", "矮马", MountTier.COMMON, "pony", speed_bonus=5, description="体型较小的马匹"),
+    MountDef("common_donkey", "驴", MountTier.COMMON, "horse", speed_bonus=3, description="耐力不错的驮兽"),
+    MountDef("common_mule", "骡子", MountTier.COMMON, "horse", speed_bonus=4, capacity=20, description="驴和马杂交的产物"),
+]
+
+_MOUNT_FINE: list[MountDef] = [
+    MountDef("fine_horse", "棕色马", MountTier.FINE, "horse", speed_bonus=10, description="常见的骑乘马"),
+    MountDef("fine_war_horse", "轻型战马", MountTier.FINE, "war_horse", speed_bonus=12, attack_bonus=5, description="适合冲锋的轻型战马"),
+    MountDef("fine_desert_horse", "沙漠马", MountTier.FINE, "horse", speed_bonus=15, description="耐热的沙漠马"),
+]
+
+_MOUNT_RARE: list[MountDef] = [
+    MountDef("rare_war_horse", "诺德战马", MountTier.RARE, "war_horse", speed_bonus=20, attack_bonus=10, defense_bonus=5, description="诺德人培育的优秀战马"),
+    MountDef("rare_destrier", "冲锋马", MountTier.RARE, "destrier", speed_bonus=18, attack_bonus=15, hp_bonus=50, description="重型骑枪冲锋的最佳选择"),
+    MountDef("rare_camel", "骆驼", MountTier.RARE, "camel", speed_bonus=25, capacity=30, description="沙漠之舟"),
+]
+
+_MOUNT_EPIC: list[MountDef] = [
+    MountDef("epic_warhorse", "帝国重装战马", MountTier.EPIC, "war_horse", speed_bonus=25, attack_bonus=20, defense_bonus=15, hp_bonus=100, description="帝国重装骑兵的标配"),
+    MountDef("epic_royal_horse", "皇家猎马", MountTier.EPIC, "horse", speed_bonus=30, description="王室狩猎专用马"),
+]
+
+_MOUNT_LEGENDARY: list[MountDef] = [
+    MountDef("legendary_grunar", "格鲁纳", MountTier.LEGENDARY, "armored_horse", speed_bonus=40, attack_bonus=30, defense_bonus=25, hp_bonus=200, capacity=50, description="传说中的钢铁战马"),
+    MountDef("legendary_bucephalus", "布塞法鲁斯", MountTier.LEGENDARY, "destrier", speed_bonus=50, attack_bonus=40, defense_bonus=30, hp_bonus=300, description="史诗级冲锋马王者"),
+]
+
+for _mt in (_MOUNT_COMMON + _MOUNT_FINE + _MOUNT_RARE + _MOUNT_EPIC + _MOUNT_LEGENDARY):
+    MOUNT_REGISTRY[_mt.mount_id] = _mt
 
 
-_refresh_equipment_items()
+# 坐骑装备注册表
+MOUNT_EQUIPMENT_REGISTRY: dict[str, MountEquipmentDef] = {}
+
+_MOUNT_ARMOR_COMMON: list[MountEquipmentDef] = [
+    MountEquipmentDef("mount_armor_cloth", "布马甲", EquipmentTier.COMMON, "mount_armor", defense_bonus=2, description="简陋的布料马甲"),
+    MountEquipmentDef("mount_armor_leather", "皮马甲", EquipmentTier.FINE, "mount_armor", defense_bonus=5, description="皮革制成的马甲"),
+]
+
+_MOUNT_ARMOR_RARE: list[MountEquipmentDef] = [
+    MountEquipmentDef("mount_armor_chain", "锁子马甲", EquipmentTier.RARE, "mount_armor", defense_bonus=10, hp_bonus=20, description="锁子甲编制的马甲"),
+    MountEquipmentDef("mount_armor_plate", "板甲马甲", EquipmentTier.EPIC, "mount_armor", defense_bonus=20, hp_bonus=50, description="重装板甲马甲"),
+]
+
+_MOUNT_WEAPON_COMMON: list[MountEquipmentDef] = [
+    MountEquipmentDef("mount_lance_wood", "木骑枪", EquipmentTier.COMMON, "mount_weapon", attack_bonus=5, description="简易木制骑枪"),
+    MountEquipmentDef("mount_lance_iron", "铁骑枪", EquipmentTier.FINE, "mount_weapon", attack_bonus=10, description="铁制骑枪"),
+]
+
+_MOUNT_WEAPON_RARE: list[MountEquipmentDef] = [
+    MountEquipmentDef("mount_lance_steel", "钢骑枪", EquipmentTier.RARE, "mount_weapon", attack_bonus=20, description="优质钢制骑枪"),
+    MountEquipmentDef("mount_lance_hero", "英雄骑枪", EquipmentTier.LEGENDARY, "mount_weapon", attack_bonus=40, special_effect="穿刺", description="传奇英雄使用的骑枪"),
+]
+
+_HORSE_ARMAMENT_COMMON: list[MountEquipmentDef] = [
+    MountEquipmentDef("horse_saddle_basic", "简易马鞍", EquipmentTier.COMMON, "horse_armament", speed_bonus=2, description="最基本的马鞍"),
+    MountEquipmentDef("horse_saddle_leather", "皮马鞍", EquipmentTier.FINE, "horse_armament", speed_bonus=5, defense_bonus=3, description="皮革包裹的马鞍"),
+]
+
+_HORSE_ARMAMENT_RARE: list[MountEquipmentDef] = [
+    MountEquipmentDef("horse_saddle_war", "骑战马鞍", EquipmentTier.RARE, "horse_armament", speed_bonus=10, defense_bonus=8, hp_bonus=20, description="适合战斗的马鞍"),
+    MountEquipmentDef("horse_saddle_royal", "皇家马鞍", EquipmentTier.LEGENDARY, "horse_armament", speed_bonus=20, defense_bonus=15, hp_bonus=50, special_effect="冲锋", description="王室专用马鞍"),
+]
+
+for _me in (_MOUNT_ARMOR_COMMON + _MOUNT_ARMOR_RARE + _MOUNT_WEAPON_COMMON + _MOUNT_WEAPON_RARE + _HORSE_ARMAMENT_COMMON + _HORSE_ARMAMENT_RARE):
+    MOUNT_EQUIPMENT_REGISTRY[_me.equip_id] = _me
 
 
-# ── 回收定价系统 ──────────────────────────────────────────────
+def get_mount_bonus(player) -> dict:
+    """计算坐骑总加成。"""
+    bonus = {
+        "speed": 0,
+        "attack": 0,
+        "defense": 0,
+        "hp": 0,
+        "capacity": 0,
+    }
+    if not player:
+        return bonus
+    
+    # 坐骑基础加成
+    mount_id = getattr(player, "mount", "无")
+    if mount_id and mount_id != "无":
+        mt = MOUNT_REGISTRY.get(mount_id)
+        if mt:
+            bonus["speed"] += mt.speed_bonus
+            bonus["attack"] += mt.attack_bonus
+            bonus["defense"] += mt.defense_bonus
+            bonus["hp"] += mt.hp_bonus
+            bonus["capacity"] += mt.capacity
+    
+    # 坐骑装备加成
+    mount_slots = ["mount_armor", "mount_weapon", "horse_armament"]
+    for slot in mount_slots:
+        equip_id = getattr(player, slot, "无")
+        if equip_id and equip_id != "无":
+            me = MOUNT_EQUIPMENT_REGISTRY.get(equip_id)
+            if me:
+                bonus["speed"] += me.speed_bonus
+                bonus["attack"] += me.attack_bonus
+                bonus["defense"] += me.defense_bonus
+                bonus["hp"] += me.hp_bonus
+    
+    return bonus
 
 RECYCLE_PRICE_CONSUMABLE: dict[str, int] = {
     "healing_pill": 8,

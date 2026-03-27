@@ -25,6 +25,7 @@ from .constants import (
     get_player_base_max_lingqi, get_player_base_stats, get_realm_base_stats, calc_gongfa_lingqi_cost,
     get_max_sub_realm, get_sub_realm_dao_yun_cost, is_high_realm,
     get_nearest_realm_level,
+    MOUNT_REGISTRY, MOUNT_EQUIPMENT_REGISTRY,
     RealmLevel,
 )
 from .cultivation import attempt_breakthrough, perform_cultivate
@@ -36,6 +37,10 @@ from .inventory import (
     add_item,
     equip_item,
     unequip_item,
+    equip_mount,
+    unequip_mount,
+    equip_mount_item,
+    unequip_mount_item,
     find_item_id_by_name,
     find_item_ids_by_name,
     get_inventory_display,
@@ -1421,6 +1426,51 @@ class GameEngine:
             return {"success": False, "message": "你还没有角色，请先创建"}
 
         result = await unequip_item(player, slot)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    # ── 坐骑系统 ─────────────────────────────────────────────
+    async def equip_mount_action(self, user_id: str, mount_id: str) -> dict:
+        """装备坐骑。"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+
+        result = await equip_mount(player, mount_id)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    async def unequip_mount_action(self, user_id: str) -> dict:
+        """卸下坐骑。"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+
+        result = await unequip_mount(player)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    async def equip_mount_item_action(self, user_id: str, equip_id: str) -> dict:
+        """装备坐骑装备。"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+
+        result = await equip_mount_item(player, equip_id)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    async def unequip_mount_item_action(self, user_id: str, slot: str) -> dict:
+        """卸下坐骑装备。"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+
+        result = await unequip_mount_item(player, slot)
         if result["success"]:
             await self._save_player(player)
         return result

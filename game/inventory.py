@@ -9,6 +9,8 @@ from .constants import (
     NON_RECYCLABLE_ITEMS,
     can_equip, get_daily_recycle_price, parse_heart_method_manual_id,
     parse_stored_heart_method_item_id, parse_gongfa_scroll_id, get_player_base_max_lingqi,
+    MOUNT_REGISTRY, MOUNT_EQUIPMENT_REGISTRY, MOUNT_SLOTS, MOUNT_SLOT_NAMES,
+    MOUNT_TIER_NAMES,
 )
 from .models import Player
 
@@ -205,6 +207,101 @@ async def unequip_item(player: Player, slot: str) -> dict:
     setattr(player, slot, "无")
     slot_label = slot_names.get(slot, slot)
     return {"success": True, "message": f"已卸下{slot_label}【{eq.name}】"}
+
+
+async def equip_mount(player: Player, mount_id: str) -> dict:
+    """装备坐骑。"""
+    if player.inventory.get(mount_id, 0) <= 0:
+        return {"success": False, "message": "背包中没有该坐骑"}
+
+    mt = MOUNT_REGISTRY.get(mount_id)
+    if not mt:
+        return {"success": False, "message": "无效的坐骑"}
+
+    current = getattr(player, "mount", "无")
+
+    player.inventory[mount_id] -= 1
+    if player.inventory[mount_id] <= 0:
+        del player.inventory[mount_id]
+
+    if current != "无" and current in MOUNT_REGISTRY:
+        player.inventory[current] = player.inventory.get(current, 0) + 1
+        old_name = MOUNT_REGISTRY[current].name
+    else:
+        old_name = None
+
+    setattr(player, "mount", mount_id)
+    tier_name = MOUNT_TIER_NAMES.get(mt.tier, "")
+    msg = f"成功召唤{tier_name}坐骑【{mt.name}】"
+    if old_name:
+        msg += f"（收回了{old_name}）"
+
+    return {"success": True, "message": msg, "slot": "mount", "details": {"speed": mt.speed_bonus, "attack": mt.attack_bonus, "defense": mt.defense_bonus}}
+
+
+async def unequip_mount(player: Player) -> dict:
+    """卸下坐骑，收回背包。"""
+    current = getattr(player, "mount", "无")
+    if current == "无" or current not in MOUNT_REGISTRY:
+        return {"success": False, "message": "当前没有装备坐骑"}
+
+    mt = MOUNT_REGISTRY[current]
+    player.inventory[current] = player.inventory.get(current, 0) + 1
+    setattr(player, "mount", "无")
+    return {"success": True, "message": f"已收回坐骑【{mt.name}】"}
+
+
+async def equip_mount_item(player: Player, equip_id: str) -> dict:
+    """装备坐骑装备。"""
+    if player.inventory.get(equip_id, 0) <= 0:
+        return {"success": False, "message": "背包中没有该装备"}
+
+    me = MOUNT_EQUIPMENT_REGISTRY.get(equip_id)
+    if not me:
+        return {"success": False, "message": "无效的坐骑装备"}
+
+    slot = me.slot
+    if slot not in MOUNT_SLOTS or slot == "mount":
+        return {"success": False, "message": "无效的坐骑装备槽位"}
+
+    current = getattr(player, slot, "无")
+
+    player.inventory[equip_id] -= 1
+    if player.inventory[equip_id] <= 0:
+        del player.inventory[equip_id]
+
+    if current != "无" and current in MOUNT_EQUIPMENT_REGISTRY:
+        player.inventory[current] = player.inventory.get(current, 0) + 1
+        old_name = MOUNT_EQUIPMENT_REGISTRY[current].name
+    else:
+        old_name = None
+
+    setattr(player, slot, equip_id)
+    tier_name = EQUIPMENT_TIER_NAMES.get(me.tier, "")
+    slot_name = MOUNT_SLOT_NAMES.get(slot, slot)
+    msg = f"成功装备{tier_name}坐骑装备【{me.name}】于{slot_name}"
+    if old_name:
+        msg += f"（卸下了{old_name}）"
+
+    return {"success": True, "message": msg, "slot": slot, "details": {"speed": me.speed_bonus, "defense": me.defense_bonus}}
+
+
+async def unequip_mount_item(player: Player, slot: str) -> dict:
+    """卸下坐骑装备。"""
+    valid_slots = ["mount_armor", "mount_weapon", "horse_armament"]
+    if slot not in valid_slots:
+        return {"success": False, "message": "无效的坐骑装备槽位"}
+
+    current = getattr(player, slot, "无")
+    if current == "无" or current not in MOUNT_EQUIPMENT_REGISTRY:
+        slot_name = MOUNT_SLOT_NAMES.get(slot, slot)
+        return {"success": False, "message": f"当前没有装备{slot_name}"}
+
+    me = MOUNT_EQUIPMENT_REGISTRY[current]
+    player.inventory[current] = player.inventory.get(current, 0) + 1
+    setattr(player, slot, "无")
+    slot_name = MOUNT_SLOT_NAMES.get(slot, slot)
+    return {"success": True, "message": f"已卸下{slot_name}【{me.name}】"}
 
 
 async def recycle_item(player: Player, item_id: str, count: int = 1) -> dict:
