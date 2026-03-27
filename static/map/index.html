@@ -125,6 +125,45 @@
                         <span class="label">繁荣度:</span>
                         <span class="value">{{ selectedLocation.prosperity }}/100</span>
                     </div>
+                    
+                    <!-- 好感度信息 -->
+                    <div v-if="villageFavor" class="favor-info">
+                        <div class="info-row">
+                            <span class="label">好感度:</span>
+                            <span class="value favor-badge" :class="villageFavor.favor_status">
+                                {{ villageFavor.favor }}/{{ villageFavor.max_favor }}
+                            </span>
+                        </div>
+                        <div class="favor-bar">
+                            <div class="favor-fill" :style="{width: (villageFavor.favor / villageFavor.max_favor * 100) + '%'}"></div>
+                        </div>
+                        <div class="info-row">
+                            <span class="label">关系:</span>
+                            <span class="value">{{ villageFavor.attitude }}</span>
+                        </div>
+                        <div class="favor-benefits">
+                            <span v-for="desc in villageFavor.benefits.descriptions" :key="desc" class="benefit-tag">
+                                {{ desc }}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- 拜访按钮 -->
+                    <button v-if="canVisitVillage" class="visit-btn" @click="visitVillage">
+                        🎁 拜访头人
+                    </button>
+                    <p v-else-if="selectedLocation.type === 'village'" class="visit-hint">
+                        名望不足，需{{ fameRequired }}点名望才能拜访
+                    </p>
+                    
+                    <!-- 任务列表 -->
+                    <div v-if="villageQuests && villageQuests.length > 0" class="quest-section">
+                        <h4>可接任务</h4>
+                        <div v-for="quest in villageQuests" :key="quest.quest_id" class="quest-item">
+                            <span class="quest-name">{{ quest.name }}</span>
+                            <span class="quest-reward">{{ quest.gold_reward }}第纳尔 +{{ quest.favor_reward }}好感</span>
+                        </div>
+                    </div>
                 </div>
                 
                 <div v-if="selectedLocation.type === 'bandit_camp'" class="extra-info">

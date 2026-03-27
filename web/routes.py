@@ -1545,4 +1545,306 @@ def create_router(
         
         return {"success": True, "factions": factions}
 
+    # ==================== 村庄好感系统 API ====================
+
+    @router.get("/api/village/{village_id}/info")
+    async def get_village_info(village_id: str, user_id: str = ""):
+        """获取村庄详细信息和玩家好感状态。"""
+        from ..game.map_system import VILLAGES
+        from ..game.village_system import (
+            get_village_state, get_favor_status, get_favor_benefits,
+            apply_favor_decay, FAME_LEVELS
+        )
+        
+        village = VILLAGES.get(village_id)
+        if not village:
+            return {"success": False, "message": "村庄不存在"}
+        
+        current_date = "2026-03-27"  # TODO: 实际获取当前日期
+        
+        result = {
+            "success": True,
+            "village": {
+                "id": village.location_id,
+                "name": village.name,
+                "type": village.village_type,
+                "faction": village.faction,
+                "production": village.production,
+                "prosperity": village.prosperity,
+                "description": village.description,
+            }
+        }
+        
+        if user_id:
+            player = engine.get_player(user_id)
+            if player:
+                player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
+                state = get_village_state({}, user_id, village_id)
+                
+                apply_favor_decay(state, current_date)
+                
+                favor_status, attitude = get_favor_status(state.favor)
+                benefits = get_favor_benefits(state.favor)
+                
+                result["player"] = {
+                    "favor": state.favor,
+                    "favor_status": favor_status,
+                    "attitude": attitude,
+                    "benefits": benefits,
+                    "total_quests": state.total_quests_completed,
+                }
+                
+                result["fame"] = {
+                    "value": player_fame,
+                    "levels": [
+                        {"name": l.name, "min_fame": l.min_fame}
+                        for l in FAME_LEVELS
+                    ]
+                }
+        
+        return result
+
+    @router.post("/api/village/{village_id}/visit")
+    async def visit_village(village_id: str, data: dict):
+        """拜访村庄头人，消耗礼物获取任务。"""
+        from ..game.map_system import VILLAGES
+        from ..game.village_system import (
+            get_village_state, can_visit, get_quests_for_player,
+            get_available_quests_for_gifts, get_fame_level, FAME_LEVELS
+        )
+        
+        user_id = data.get("user_id", "")
+        gift_ids = data.get("gifts", [])  # 礼物物品ID列表
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        village = VILLAGES.get(village_id)
+        if not village:
+            return {"success": False, "message": "村庄不存在"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
+        
+        can_visit_ok, msg = can_visit(player_fame)
+        if not can_visit_ok:
+            return {"success": False, "message": msg}
+        
+        state = get_village_state({}, user_id, village_id)
+        
+        if gift_ids:
+            available_quests = get_available_quests_for_gifts(gift_ids, player_fame)
+            available_quests = [q for q in available_quests if q.min_favor <= state.favor]
+        else:
+            available_quests = get_quests_for_player(player_fame, state.favor)
+        
+        fame_level = get_fame_level(player_fame)
+        
+        return {
+            "success": True,
+            "message": f"拜访{village.name}头人成功",
+            "favor": state.favor,
+            "max_favor": fame_level.max_favor,
+            "can_quest": fame_level.can_quest,
+            "available_quests": [
+                {
+                    "quest_id": q.quest_id,
+                    "name": q.name,
+                    "description": q.description,
+                    "difficulty": q.difficulty,
+                    "gold_reward": q.gold_reward,
+                    "favor_reward": q.favor_reward,
+                    "requires_combat": q.requires_combat,
+                    "requires_time": q.requires_time > 0,
+                }
+                for q in available_quests[:5]
+            ],
+            "gifts_value": sum(
+                10 for _ in gift_ids
+            ),
+        }
+
+    @router.get("/api/village/{village_id}/quests")
+    async def get_village_quests(village_id: str, user_id: str = ""):
+        """获取村庄当前可接任务。"""
+        from ..game.map_system import VILLAGES
+        from ..game.village_system import get_village_state, get_quests_for_player
+        
+        village = VILLAGES.get(village_id)
+        if not village:
+            return {"success": False, "message": "村庄不存在"}
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
+        state = get_village_state({}, user_id, village_id)
+        
+        quests = get_quests_for_player(player_fame, state.favor)
+        
+        return {
+            "success": True,
+            "village_id": village_id,
+            "player_favor": state.favor,
+            "quests": [
+                {
+                    "quest_id": q.quest_id,
+                    "name": q.name,
+                    "description": q.description,
+                    "difficulty": q.difficulty,
+                    "gold_reward": q.gold_reward,
+                    "favor_reward": q.favor_reward,
+                }
+                for q in quests
+            ]
+        }
+
+    @router.post("/api/village/{village_id}/quest/accept")
+    async def accept_village_quest(village_id: str, data: dict):
+        """接受村庄任务。"""
+        from ..game.map_system import VILLAGES
+        from ..game.village_system import get_village_state, can_accept_quest, VILLAGE_QUESTS
+        
+        user_id = data.get("user_id", "")
+        quest_id = data.get("quest_id", "")
+        
+        if not user_id or not quest_id:
+            return {"success": False, "message": "参数不完整"}
+        
+        village = VILLAGES.get(village_id)
+        if not village:
+            return {"success": False, "message": "村庄不存在"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
+        state = get_village_state({}, user_id, village_id)
+        
+        quest = next((q for q in VILLAGE_QUESTS if q.quest_id == quest_id), None)
+        if not quest:
+            return {"success": False, "message": "任务不存在"}
+        
+        can_accept, msg = can_accept_quest(state, quest, player_fame)
+        if not can_accept:
+            return {"success": False, "message": msg}
+        
+        return {
+            "success": True,
+            "message": f"已接受任务：{quest.name}",
+            "quest": {
+                "quest_id": quest.quest_id,
+                "name": quest.name,
+                "description": quest.description,
+                "requires_combat": quest.requires_combat,
+                "requires_time": quest.requires_time,
+            }
+        }
+
+    @router.get("/api/fame/info")
+    async def get_fame_info(user_id: str = ""):
+        """获取玩家名望信息。"""
+        from ..game.village_system import get_fame_display, FAME_LEVELS
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
+        fame_info = get_fame_display(player_fame)
+        
+        return {
+            "success": True,
+            "fame": fame_info,
+            "levels": [
+                {
+                    "name": l.name,
+                    "min_fame": l.min_fame,
+                    "max_favor": l.max_favor,
+                    "can_visit": l.can_visit,
+                    "can_quest": l.can_quest,
+                }
+                for l in FAME_LEVELS
+            ]
+        }
+
+    @router.get("/api/gifts/list")
+    async def get_gift_list():
+        """获取所有礼物列表。"""
+        from ..game.village_system import GIFT_ITEMS
+        
+        gifts = [
+            {
+                "id": item_id,
+                "name": gift.name,
+                "value": gift.value,
+                "can_unlock_legendary": gift.can_unlock_legendary,
+            }
+            for item_id, gift in GIFT_ITEMS.items()
+        ]
+        
+        gifts.sort(key=lambda x: x["value"])
+        
+        return {
+            "success": True,
+            "gifts": gifts,
+            "categories": {
+                "common": [1, 30],
+                "medium": [31, 80],
+                "advanced": [81, 150],
+                "rare": [151, 999],
+            }
+        }
+
+    @router.get("/api/village/{village_id}/daily")
+    async def get_daily_quests(village_id: str, user_id: str = ""):
+        """获取每日任务。"""
+        from ..game.map_system import VILLAGES
+        from ..game.village_system import get_village_state, refresh_daily_quests, DAILY_QUESTS
+        
+        village = VILLAGES.get(village_id)
+        if not village:
+            return {"success": False, "message": "村庄不存在"}
+        
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        state = get_village_state({}, user_id, village_id)
+        current_date = "2026-03-27"
+        player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
+        
+        daily = refresh_daily_quests(state, current_date, player_fame)
+        
+        return {
+            "success": True,
+            "daily_quests": [
+                {
+                    "quest_id": q.quest_id,
+                    "name": q.name,
+                    "description": q.description,
+                    "gold_reward": q.gold_reward,
+                    "favor_reward": q.favor_reward,
+                    "completed": q.quest_id in state.daily_completed,
+                }
+                for q in daily
+            ],
+            "completed_count": len(state.daily_completed),
+            "total_count": len(state.daily_quests),
+        }
+
     return router

@@ -26,6 +26,13 @@ createApp({
             // 选中地点
             selectedLocation: null,
             
+            // 村庄好感数据
+            villageFavor: null,
+            villageQuests: [],
+            fameRequired: 100,
+            canVisitVillage: false,
+            playerFame: 0,
+            
             // 旅行状态
             isTraveling: false,
             travelDestination: '',
@@ -54,6 +61,17 @@ createApp({
                 this.selectedLocation.x, this.selectedLocation.y
             );
             return dist > 10;
+        },
+    },
+    
+    watch: {
+        selectedLocation(newLoc) {
+            if (newLoc && newLoc.type === 'village') {
+                this.loadVillageInfo();
+            } else {
+                this.villageFavor = null;
+                this.villageQuests = [];
+            }
         },
     },
     
@@ -264,6 +282,70 @@ createApp({
         // 工具函数
         calculateDistance(x1, y1, x2, y2) {
             return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+        },
+        
+        // 村庄好感系统
+        async loadVillageInfo() {
+            if (!this.selectedLocation || !this.userId) return;
+            
+            try {
+                const res = await axios.get(`/api/village/${this.selectedLocation.id}/info`, {
+                    params: { user_id: this.userId }
+                });
+                
+                if (res.data.success) {
+                    this.villageFavor = res.data.player;
+                    this.playerFame = res.data.fame?.value || 0;
+                    this.canVisitVillage = res.data.fame?.can_visit || false;
+                    this.fameRequired = 100;
+                    
+                    // 加载任务列表
+                    this.loadVillageQuests();
+                }
+            } catch (err) {
+                console.error('加载村庄信息失败:', err);
+            }
+        },
+        
+        async loadVillageQuests() {
+            if (!this.selectedLocation || !this.userId) return;
+            
+            try {
+                const res = await axios.get(`/api/village/${this.selectedLocation.id}/quests`, {
+                    params: { user_id: this.userId }
+                });
+                
+                if (res.data.success) {
+                    this.villageQuests = res.data.quests || [];
+                }
+            } catch (err) {
+                console.error('加载任务列表失败:', err);
+            }
+        },
+        
+        async visitVillage() {
+            if (!this.selectedLocation || !this.userId) return;
+            
+            try {
+                const res = await axios.post(`/api/village/${this.selectedLocation.id}/visit`, {
+                    user_id: this.userId,
+                    gifts: []
+                });
+                
+                if (res.data.success) {
+                    alert(res.data.message);
+                    this.villageQuests = res.data.available_quests || [];
+                    
+                    if (res.data.player) {
+                        this.villageFavor = res.data.player;
+                    }
+                } else {
+                    alert(res.data.message || '拜访失败');
+                }
+            } catch (err) {
+                console.error('拜访头人失败:', err);
+                alert('拜访失败: ' + (err.response?.data?.message || err.message));
+            }
         },
     },
 }).mount('#app');
