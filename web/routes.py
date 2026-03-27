@@ -251,6 +251,46 @@ def create_router(
         )
         return response
 
+    @router.get("/map", response_class=HTMLResponse)
+    async def map_page(request: Request):
+        """提供卡拉迪亚大陆地图页面。"""
+        html = (static_dir / "map" / "index.html").read_text(encoding="utf-8")
+        page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
+        page_client_id = str(request.cookies.get("xiuxian_page_client", "")).strip()
+        if not page_client_id:
+            page_client_id = secrets.token_hex(16)
+        if required_guard_token:
+            ip = _client_ip(request)
+            ua = str(request.headers.get("user-agent", "")).strip().lower()
+            page_guard = access_guard.issue_page_session(
+                secret=required_guard_token,
+                ip=ip,
+                ua=ua,
+                client_key=page_client_id,
+                ttl_seconds=PAGE_GUARD_TTL_SECONDS,
+            )
+        
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+        ws_base = f"{scheme}://{host}"
+        
+        bootstrap = (
+            "<script>"
+            f"window.__XIUXIAN_PAGE_GUARD__ = {json.dumps(page_guard, ensure_ascii=False)};"
+            f"window.__XIUXIAN_WS_BASE__ = {json.dumps(ws_base, ensure_ascii=False)};"
+            "</script>"
+        )
+        html = re.sub(r'(<script\b)', f'{bootstrap}\n    \\1', html, count=1)
+        response = HTMLResponse(html)
+        response.set_cookie(
+            key="xiuxian_page_client",
+            value=page_client_id,
+            max_age=30 * 24 * 3600,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
     @router.get("/api/status")
     async def status():
         """健康检查和基础统计。"""

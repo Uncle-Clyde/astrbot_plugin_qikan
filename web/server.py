@@ -65,15 +65,7 @@ class WebServer:
             )
         )
         
-        # 地图页面路由
-        @self.app.get("/map")
-        async def map_page():
-            map_dir = Path(__file__).parent.parent / "static" / "map"
-            index_file = map_dir / "index.html"
-            if index_file.exists():
-                from fastapi.responses import FileResponse
-                return FileResponse(str(index_file))
-            return {"error": "地图页面不存在"}
+
 
     async def start(self):
         """在当前事件循环中启动 uvicorn。"""
