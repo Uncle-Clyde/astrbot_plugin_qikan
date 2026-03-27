@@ -7,10 +7,24 @@ const api = axios.create({
   timeout: 10000
 })
 
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('qikan_token')
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`
+  }
+  return config
+})
+
 api.interceptors.response.use(
   res => res.data,
   err => {
-    ElMessage.error(err.message || '请求失败')
+    if (err.response?.status === 401) {
+      ElMessage.error('登录已过期，请重新登录')
+      localStorage.removeItem('qikan_token')
+      window.location.href = '/'
+    } else {
+      ElMessage.error(err.response?.data?.message || err.message || '请求失败')
+    }
     return Promise.reject(err)
   }
 )

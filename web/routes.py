@@ -161,6 +161,27 @@ def create_router(
             )
         return None
 
+    def _get_token_from_request(request: Request) -> str | None:
+        """从请求中提取token，支持Authorization header和body。"""
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            return auth_header[7:].strip()
+        if hasattr(request, "json") and request.method == "POST":
+            try:
+                body = request._json
+                if body:
+                    return body.get("token", "")
+            except:
+                pass
+        return None
+
+    def _verify_token(request: Request) -> str | None:
+        """验证token并返回user_id。"""
+        token = _get_token_from_request(request)
+        if not token:
+            return None
+        return engine.auth.verify_web_token(token)
+
     def _create_admin_token() -> str:
         token = secrets.token_urlsafe(32)
         admin_tokens[token] = time.time() + ADMIN_TOKEN_EXPIRY
@@ -360,10 +381,9 @@ def create_router(
     async def set_password(request: Request):
         """为已有角色设置密码（首次从聊天创建的角色）。"""
         body = await request.json()
-        token = body.get("token", "")
         password = body.get("password", "")
 
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "登录已过期，请重新登录"},
@@ -378,10 +398,7 @@ def create_router(
     @router.post("/api/bind-key")
     async def get_bind_key(request: Request):
         """获取6位数聊天绑定密钥。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "登录已过期，请重新登录"},
@@ -399,10 +416,7 @@ def create_router(
     @router.post("/api/verify-token")
     async def verify_token(request: Request):
         """验证 Web Token 是否有效。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "Token 无效或已过期"},
@@ -428,10 +442,7 @@ def create_router(
     @router.post("/api/checkin")
     async def daily_checkin(request: Request):
         """每日签到。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "Token 无效或已过期"},
@@ -446,16 +457,14 @@ def create_router(
     @router.post("/api/start-afk")
     async def start_afk(request: Request):
         """开始挂机修炼。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "Token 无效或已过期"},
                 status_code=401,
             )
 
+        body = await request.json()
         minutes = body.get("minutes", 0)
         try:
             minutes = int(minutes)
@@ -471,10 +480,7 @@ def create_router(
     @router.post("/api/collect-afk")
     async def collect_afk(request: Request):
         """结算挂机修炼。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "Token 无效或已过期"},
@@ -487,10 +493,7 @@ def create_router(
     @router.post("/api/cancel-afk")
     async def cancel_afk(request: Request):
         """取消挂机修炼。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "Token 无效或已过期"},
@@ -505,10 +508,7 @@ def create_router(
     @router.post("/api/adventure")
     async def do_adventure(request: Request):
         """执行历练。"""
-        body = await request.json()
-        token = body.get("token", "")
-
-        user_id = engine.auth.verify_web_token(token)
+        user_id = _verify_token(request)
         if not user_id:
             return JSONResponse(
                 {"success": False, "message": "Token 无效或已过期"},
