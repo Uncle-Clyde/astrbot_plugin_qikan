@@ -10,7 +10,7 @@
 | Web UI 版本 | `0.1.1` |
 | 技能系统 | `骑砍风格技能树` |
 | 插件标识 | `astrbot_plugin_qikan` |
-| 数据存储 | `SQLite`（`data/plugin_data/astrbot_plugin_qikan/xiuxian.db`） |
+| 数据存储 | `SQLite`（`data/plugin_data/astrbot_plugin_qikan/qikan.db`） |
 
 ## 功能概览
 
