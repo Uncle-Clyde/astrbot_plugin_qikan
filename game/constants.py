@@ -26,8 +26,8 @@ class RealmLevel(IntEnum):
 # 有小爵位的大爵位范围
 SUB_REALM_MIN = RealmLevel.QI_REFINING
 SUB_REALM_MAX = RealmLevel.MAHAYANA
-MAX_SUB_REALM = 9  # 练气~元婴: 0=一层, 9=十层(圆满)
-MAX_HIGH_SUB_REALM = 3  # 化神~大乘: 0=初期, 3=圆满
+MAX_SUB_REALM = 9  # 新兵~伯爵: 0=一期, 9=十期(圆满)
+MAX_HIGH_SUB_REALM = 3  # 领主~伯爵: 0=初期, 3=圆满
 
 SUB_REALM_NAMES = ["新兵", "士兵", "老练", "精锐", "精英", "高手", "大师", "宗师", "传奇", "巅峰"]
 HIGH_SUB_REALM_NAMES = ["初级", "中级", "高级", "大师级"]
