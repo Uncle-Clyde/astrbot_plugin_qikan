@@ -455,7 +455,7 @@ class XiuxianPlugin(Star):
         return None
 
     @filter.command_group(CMD_PREFIX)
-    def xiuxian_group(self):
+    def qikan_group(self):
         """骑砍英雄传 — 文字骑砍游戏"""
         pass
 
@@ -493,7 +493,7 @@ class XiuxianPlugin(Star):
         ("web", "获取网页版链接"),
     ]
 
-    @xiuxian_group.command("帮助")
+    @qikan_group.command("帮助")
     async def show_help(self, event: AstrMessageEvent):
         """显示所有可用指令。"""
         img_bytes = renderer.render_help(self._CMD_HELP, CMD_PREFIX)
@@ -503,7 +503,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("面板")
+    @qikan_group.command("面板")
     async def show_panel(self, event: AstrMessageEvent):
         """查看角色面板。"""
         player_id = self._resolve_player_id(event)
@@ -521,7 +521,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("训练")
+    @qikan_group.command("训练")
     async def cultivate(self, event: AstrMessageEvent):
         """训练获取经验。"""
         player_id = self._resolve_player_id(event)
@@ -531,7 +531,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.cultivate(player_id)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("签到")
+    @qikan_group.command("签到")
     async def daily_checkin(self, event: AstrMessageEvent):
         """每日签到领取奖励。"""
         player_id = self._resolve_player_id(event)
@@ -547,7 +547,7 @@ class XiuxianPlugin(Star):
                 return
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("挂机")
+    @qikan_group.command("挂机")
     async def afk_cultivate(self, event: AstrMessageEvent, minutes: str = ""):
         """开始挂机修炼。"""
         if not minutes.strip():
@@ -565,7 +565,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.start_afk_cultivate(player_id, mins)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("结算")
+    @qikan_group.command("结算")
     async def collect_afk(self, event: AstrMessageEvent):
         """领取挂机修炼收益。"""
         player_id = self._resolve_player_id(event)
@@ -581,7 +581,7 @@ class XiuxianPlugin(Star):
                 return
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("取消挂机")
+    @qikan_group.command("取消挂机")
     async def cancel_afk(self, event: AstrMessageEvent):
         """取消挂机修炼。"""
         player_id = self._resolve_player_id(event)
@@ -591,7 +591,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.cancel_afk_cultivate(player_id)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("征战")
+    @qikan_group.command("征战")
     async def do_adventure(self, event: AstrMessageEvent):
         """进入副本征战。"""
         player_id = self._resolve_player_id(event)
@@ -601,12 +601,12 @@ class XiuxianPlugin(Star):
         result = await self._engine.adventure(player_id)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("征战场景")
+    @qikan_group.command("征战场景")
     async def show_scenes(self, event: AstrMessageEvent):
         """提示旧版征战场景已停用。"""
         yield event.plain_result("旧版征战场景已停用，征战现已改为 Web 端的副本探索。")
 
-    @xiuxian_group.command("晋升")
+    @qikan_group.command("晋升")
     async def breakthrough(self, event: AstrMessageEvent):
         """尝试晋升爵位。"""
         player_id = self._resolve_player_id(event)
@@ -616,7 +616,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.breakthrough(player_id)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("背包")
+    @qikan_group.command("背包")
     async def show_inventory(self, event: AstrMessageEvent):
         """查看背包物品。"""
         player_id = self._resolve_player_id(event)
@@ -631,7 +631,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("使用")
+    @qikan_group.command("使用")
     async def use_item_cmd(self, event: AstrMessageEvent, item_name: str = ""):
         """使用物品。"""
         if not item_name.strip():
@@ -644,7 +644,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.use_item_by_name(player_id, item_name.strip())
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("装备")
+    @qikan_group.command("装备")
     async def equip_cmd(self, event: AstrMessageEvent, item_name: str = ""):
         """装备武器或护甲。"""
         if not item_name.strip():
@@ -657,7 +657,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.equip_by_name(player_id, item_name.strip())
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("卸下")
+    @qikan_group.command("卸下")
     async def unequip_cmd(self, event: AstrMessageEvent, slot_name: str = ""):
         """卸下装备。"""
         slot_map = {
@@ -682,7 +682,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.unequip_action(player_id, slot)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("查看")
+    @qikan_group.command("查看")
     async def view_item(self, event: AstrMessageEvent, query_type: str = "", item_name: str = ""):
         """按类型查看物品/装备/被动技能详情。"""
         query_type = query_type.strip()
@@ -713,7 +713,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("回收")
+    @qikan_group.command("回收")
     async def recycle_cmd(self, event: AstrMessageEvent, args: str = ""):
         """回收物品获取第纳尔。"""
         args = args.strip()
@@ -766,7 +766,7 @@ class XiuxianPlugin(Star):
         result = await self._engine.recycle_by_name(user_id, item_name, count, query_type=query_type)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("集市")
+    @qikan_group.command("集市")
     async def show_market(self, event: AstrMessageEvent, args: str = ""):
         """查看集市商品列表。"""
         player_id = self._resolve_player_id(event)
@@ -786,7 +786,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("上架")
+    @qikan_group.command("上架")
     async def market_list_cmd(self, event: AstrMessageEvent, args: str = ""):
         """上架物品到集市。"""
         args = args.strip()
@@ -839,7 +839,7 @@ class XiuxianPlugin(Star):
         )
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("购买")
+    @qikan_group.command("购买")
     async def market_buy_cmd(self, event: AstrMessageEvent, args: str = ""):
         """从坊市购买商品。"""
         code = args.strip()
@@ -855,17 +855,17 @@ class XiuxianPlugin(Star):
         result = await self._engine.market_buy_by_prefix(user_id, code)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("技能")
+    @qikan_group.command("技能")
     async def list_heart_methods(self, event: AstrMessageEvent):
         """提示技能修炼入口已调整为技能书掉落。"""
         yield event.plain_result("已取消直接选择技能。\n请通过征战掉落【普通技能书】，再在背包中使用技能书进行训练。")
 
-    @xiuxian_group.command("学习技能")
+    @qikan_group.command("学习技能")
     async def learn_heart_method_cmd(self, event: AstrMessageEvent, method_name: str = ""):
         """提示技能修炼入口已调整为技能书掉落。"""
         yield event.plain_result("已取消直接选择技能。\n请在背包中使用征战掉落的【普通技能书】进行训练。")
 
-    @xiuxian_group.command("web")
+    @qikan_group.command("web")
     async def web_link(self, event: AstrMessageEvent):
         """获取网页游戏链接。"""
         enable_web = self._get_cfg_bool("enable_web", False)
@@ -881,7 +881,7 @@ class XiuxianPlugin(Star):
         template = str(self._get_cfg("web_link_message", default_msg))
         yield event.plain_result(template.replace("{port}", str(port)))
 
-    @xiuxian_group.command("登录")
+    @qikan_group.command("登录")
     async def chat_login(self, event: AstrMessageEvent, key: str = ""):
         """用Web端密钥登录。"""
         if not key.strip():
@@ -917,7 +917,7 @@ class XiuxianPlugin(Star):
             f"现在可以使用 {self._cmd('面板')}、{self._cmd('修炼')} 等指令了"
         )
 
-    @xiuxian_group.command("登出")
+    @qikan_group.command("登出")
     async def chat_logout(self, event: AstrMessageEvent):
         """解除QQ绑定。"""
         if not self._engine.auth:
@@ -933,7 +933,7 @@ class XiuxianPlugin(Star):
         await self._engine.auth.unbind_chat(chat_user_id)
         yield event.plain_result("已解除角色绑定")
 
-    @xiuxian_group.command("排行")
+    @qikan_group.command("排行")
     async def show_rankings(self, event: AstrMessageEvent):
         """查看骑士爵位排行榜。"""
         rankings = self._engine.get_rankings(limit=10)
@@ -956,7 +956,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("死亡排行")
+    @qikan_group.command("死亡排行")
     async def show_death_rankings(self, event: AstrMessageEvent):
         """查看死亡次数排行榜。"""
         rankings = self._engine.get_death_rankings(limit=10)
@@ -967,7 +967,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("在线")
+    @qikan_group.command("在线")
     async def show_online(self, event: AstrMessageEvent):
         """查看当前在线骑士。"""
         online_ids = self._engine.get_online_user_ids()
@@ -987,7 +987,7 @@ class XiuxianPlugin(Star):
             return
         yield event.image_result(img_path)
 
-    @xiuxian_group.command("劫匪")
+    @qikan_group.command("劫匪")
     async def show_nearby_bandits(self, event: AstrMessageEvent):
         """查看附近的劫匪。"""
         player_id = self._resolve_player_id(event)
@@ -1025,7 +1025,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("攻击")
+    @qikan_group.command("攻击")
     async def attack_bandit(self, event: AstrMessageEvent, bandit_id: str = ""):
         """攻击劫匪。"""
         player_id = self._resolve_player_id(event)
@@ -1086,7 +1086,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("劫匪列表")
+    @qikan_group.command("劫匪列表")
     async def list_all_bandits(self, event: AstrMessageEvent):
         """查看所有劫匪。"""
         from .game.map_system import get_bandit_manager, BANDIT_TYPE_NAMES, BANDIT_TYPE_ICONS
@@ -1121,7 +1121,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("劫匪信息")
+    @qikan_group.command("劫匪信息")
     async def bandit_info(self, event: AstrMessageEvent, bandit_id: str = ""):
         """查看劫匪详细信息。"""
         if not bandit_id.strip():
@@ -1160,7 +1160,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("治疗")
+    @qikan_group.command("治疗")
     async def heal_command(self, event: AstrMessageEvent, skill_name: str = ""):
         """治疗自己或治疗重伤状态。"""
         player_id = self._resolve_player_id(event)
@@ -1226,7 +1226,7 @@ class XiuxianPlugin(Star):
             yield event.plain_result(f"当前生命：{player.hp}/{player.max_hp}")
             yield event.plain_result(f"使用方法：{self._cmd('治疗 <技能名>')}")
 
-    @xiuxian_group.command("等级")
+    @qikan_group.command("等级")
     async def show_level(self, event: AstrMessageEvent):
         """查看当前等级和经验。"""
         player_id = self._resolve_player_id(event)
@@ -1263,7 +1263,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("属性")
+    @qikan_group.command("属性")
     async def show_attributes(self, event: AstrMessageEvent):
         """查看属性分配情况。"""
         player_id = self._resolve_player_id(event)
@@ -1293,7 +1293,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("加点")
+    @qikan_group.command("加点")
     async def allocate_point(self, event: AstrMessageEvent, attr_type: str = ""):
         """分配属性点。"""
         player_id = self._resolve_player_id(event)
@@ -1323,7 +1323,7 @@ class XiuxianPlugin(Star):
         result = LevelSystem.allocate_point(player, attr_type.strip())
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("我的称号")
+    @qikan_group.command("我的称号")
     async def my_title(self, event: AstrMessageEvent):
         """查看当前称号。"""
         player_id = self._resolve_player_id(event)
@@ -1360,7 +1360,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("技能")
+    @qikan_group.command("技能")
     async def show_skills(self, event: AstrMessageEvent):
         """查看骑砍技能列表"""
         from .game.skills_simple import SKILL_TREES, get_skill_trees_by_category, HEART_METHOD_REGISTRY
@@ -1393,7 +1393,7 @@ class XiuxianPlugin(Star):
         
         yield event.plain_result("\n".join(lines))
 
-    @xiuxian_group.command("技能树")
+    @qikan_group.command("技能树")
     async def show_skill_trees(self, event: AstrMessageEvent):
         """查看所有技能树详情"""
         from .game.skills_simple import SKILL_TREES, HEART_METHOD_REGISTRY
@@ -1414,7 +1414,7 @@ class XiuxianPlugin(Star):
     # 医疗与药剂命令
     # ══════════════════════════════════════════════════════════════
 
-    @xiuxian_group.command("医疗技能")
+    @qikan_group.command("医疗技能")
     async def show_heal_skills(self, event: AstrMessageEvent):
         """查看医疗技能列表"""
         player_id = self._resolve_player_id(event)
@@ -1430,7 +1430,7 @@ class XiuxianPlugin(Star):
         from .game.heal_skills import format_heal_skills_list
         yield event.plain_result(format_heal_skills_list(player))
 
-    @xiuxian_group.command("治疗")
+    @qikan_group.command("治疗")
     async def use_heal_skill_cmd(self, event: AstrMessageEvent, skill_name: str = ""):
         """使用医疗技能"""
         player_id = self._resolve_player_id(event)
@@ -1473,13 +1473,13 @@ class XiuxianPlugin(Star):
         result = use_heal_skill(player, skill_id)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("药剂列表")
+    @qikan_group.command("药剂列表")
     async def show_potions(self, event: AstrMessageEvent):
         """查看可用药剂"""
         from .game.simple_potions import format_potion_shop
         yield event.plain_result(format_potion_shop())
 
-    @xiuxian_group.command("使用药剂")
+    @qikan_group.command("使用药剂")
     async def use_potion_cmd(self, event: AstrMessageEvent, potion_name: str = ""):
         """使用药剂"""
         player_id = self._resolve_player_id(event)
@@ -1520,7 +1520,7 @@ class XiuxianPlugin(Star):
         result = use_potion(player, potion_id)
         yield event.plain_result(result["message"])
 
-    @xiuxian_group.command("购买药剂")
+    @qikan_group.command("购买药剂")
     async def buy_potion(self, event: AstrMessageEvent, potion_name: str = ""):
         """购买药剂"""
         player_id = self._resolve_player_id(event)
