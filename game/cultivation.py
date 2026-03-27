@@ -227,7 +227,7 @@ async def attempt_breakthrough(player: Player, bonus_rate: float = 0.0,
     """尝试晋升大爵位。
 
     前提：有小爵位的大爵位需要达到圆满（sub_realm=9）才能晋升。
-    元婴期开始晋升有死亡概率。
+    骑士长开始晋升有死亡概率。
 
     Returns:
         {"success": bool, "message": str, "new_realm": str | None, "died": bool}
@@ -282,7 +282,7 @@ async def attempt_breakthrough(player: Player, bonus_rate: float = 0.0,
     if dao_cost > 0:
         player.dao_yun -= dao_cost
 
-    # 死亡判定（元婴期开始）
+    # 死亡判定（骑士长开始）
     death_rate = realm_cfg.get("death_rate", 0.0)
     if death_rate > 0 and not prevent_death:
         if random.random() < death_rate:

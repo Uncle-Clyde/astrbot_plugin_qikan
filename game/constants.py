@@ -1179,10 +1179,10 @@ GONGFA_TIER_NAMES: dict[int, str] = {
 
 # 修炼熟练度所需最低爵位（装备无限制）
 GONGFA_TIER_REALM_REQ: dict[int, int] = {
-    GongfaTier.HUANG: 0,   # 凡人即可修炼
-    GongfaTier.XUAN: 1,    # 练气期
-    GongfaTier.DI: 3,      # 金丹期
-    GongfaTier.TIAN: 6,    # 合虚期
+    GongfaTier.HUANG: 0,   # 平民即可修炼
+    GongfaTier.XUAN: 1,    # 需要新兵爵位
+    GongfaTier.DI: 3,      # 需要骑士爵位
+    GongfaTier.TIAN: 6,    # 需要男爵爵位
 }
 
 
@@ -1636,7 +1636,7 @@ def has_sub_realm(realm: int) -> bool:
 
 
 def is_high_realm(realm: int) -> bool:
-    """是否为高阶大爵位（化神~大乘，4层小爵位）。"""
+    """是否为高阶大爵位（领主~伯爵，4层小爵位）。"""
     cfg = REALM_CONFIG.get(realm)
     return bool(cfg and cfg.get("high_realm"))
 
