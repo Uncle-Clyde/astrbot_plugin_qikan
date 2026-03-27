@@ -70,8 +70,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
+
+const router = useRouter()
 
 const icons = ref({})
 const previewVisible = ref(false)
@@ -96,6 +99,38 @@ api.interceptors.request.use(config => {
   }
   return config
 })
+
+api.interceptors.response.use(
+  res => res.data,
+  err => {
+    if (err.response?.status === 401) {
+      ElMessage.error('请先登录管理员账号')
+      router.push('/')
+    }
+    return Promise.reject(err)
+  }
+)
+
+const checkAdmin = async () => {
+  if (!adminToken) {
+    ElMessage.error('需要管理员权限')
+    router.push('/home')
+    return false
+  }
+  try {
+    const res = await api.post('/api/admin/verify-token', { admin_token: adminToken })
+    if (!res.success) {
+      ElMessage.error('管理员权限验证失败')
+      router.push('/home')
+      return false
+    }
+    return true
+  } catch (e) {
+    ElMessage.error('管理员权限验证失败')
+    router.push('/home')
+    return false
+  }
+}
 
 const loadIcons = async () => {
   try {
@@ -153,8 +188,11 @@ const saveIcon = async (key) => {
   }
 }
 
-onMounted(() => {
-  loadIcons()
+onMounted(async () => {
+  const isAdmin = await checkAdmin()
+  if (isAdmin) {
+    loadIcons()
+  }
 })
 </script>
 
