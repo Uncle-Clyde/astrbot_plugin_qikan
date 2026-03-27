@@ -1,0 +1,324 @@
+/* 骑砍英雄传 - 骑士主题样式 */
+
+:root {
+  /* 主色调 - 深红与黄金 */
+  --primary-color: #8B0000;
+  --primary-light: #B22222;
+  --primary-dark: #5C0000;
+  
+  /* 次要色 - 黄金与皇室蓝 */
+  --secondary-color: #D4AF37;
+  --secondary-light: #FFD700;
+  --accent-blue: #1E3A5F;
+  
+  /* 背景色 - 深棕与黑 */
+  --bg-dark: #0D0D0D;
+  --bg-main: #1A1A1A;
+  --bg-card: #252525;
+  --bg-card-hover: #2F2F2F;
+  --bg-header: #151515;
+  
+  /* 边框与装饰 */
+  --border-color: #3D3D3D;
+  --border-gold: #8B7355;
+  --shadow-color: rgba(0, 0, 0, 0.5);
+  
+  /* 文字色 */
+  --text-primary: #F5DEB3;
+  --text-secondary: #C4B59D;
+  --text-muted: #888888;
+  --text-gold: #FFD700;
+  
+  /* 功能色 */
+  --success-color: #2E7D32;
+  --warning-color: #F57C00;
+  --danger-color: #C62828;
+  --info-color: #1565C0;
+  
+  /* 装备槽颜色 */
+  --slot-empty: #1A1A1A;
+  --slot-equipped: #2D2416;
+  --slot-border: #5C4033;
+  --slot-hover: #3D2B1F;
+}
+
+/* 全局重置 */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-gold);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--secondary-color);
+}
+
+/* 卡片样式 */
+.qikan-card {
+  background: linear-gradient(145deg, var(--bg-card) 0%, #1E1E1E 100%);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.qikan-card:hover {
+  border-color: var(--border-gold);
+}
+
+.qikan-card-header {
+  background: linear-gradient(90deg, var(--bg-header) 0%, #1F1F1F 100%);
+  border-bottom: 2px solid var(--primary-color);
+  padding: 12px 16px;
+  font-weight: bold;
+  color: var(--text-gold);
+}
+
+/* 装备槽样式 */
+.equip-slot {
+  background: linear-gradient(145deg, var(--slot-empty) 0%, #0F0F0F 100%);
+  border: 2px solid var(--slot-border);
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.equip-slot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(45deg, transparent 40%, rgba(139, 115, 85, 0.1) 50%, transparent 60%);
+  pointer-events: none;
+}
+
+.equip-slot:hover {
+  background: linear-gradient(145deg, var(--slot-hover) 0%, #1F1510 100%);
+  border-color: var(--secondary-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+}
+
+.equip-slot.equipped {
+  background: linear-gradient(145deg, var(--slot-equipped) 0%, #1F1510 100%);
+  border-color: var(--secondary-color);
+}
+
+.equip-slot.empty {
+  opacity: 0.7;
+}
+
+.slot-icon {
+  font-size: 28px;
+  display: block;
+  margin-bottom: 4px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+}
+
+.slot-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.slot-item {
+  font-size: 11px;
+  color: var(--text-gold);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.slot-empty {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+/* 按钮样式 */
+.qikan-btn {
+  background: linear-gradient(145deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+  border: 1px solid var(--primary-light);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.qikan-btn:hover {
+  background: linear-gradient(145deg, var(--primary-light) 0%, var(--primary-color) 100%);
+  box-shadow: 0 4px 12px rgba(139, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+.qikan-btn-secondary {
+  background: linear-gradient(145deg, #3D3D3D 0%, #252525 100%);
+  border: 1px solid var(--border-gold);
+  color: var(--secondary-color);
+}
+
+.qikan-btn-secondary:hover {
+  background: linear-gradient(145deg, var(--border-gold) 0%, #5C4033 100%);
+  color: var(--text-gold);
+}
+
+/* 导航栏 */
+.qikan-header {
+  background: linear-gradient(180deg, var(--bg-header) 0%, #0A0A0A 100%);
+  border-bottom: 3px solid var(--primary-color);
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.qikan-header h2 {
+  color: var(--text-gold);
+  margin: 0;
+  font-size: 24px;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+  letter-spacing: 2px;
+}
+
+/* 输入框 */
+.qikan-input {
+  background: var(--bg-dark);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.qikan-input:focus {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+  outline: none;
+}
+
+.qikan-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* 属性条 */
+.stat-bar {
+  height: 8px;
+  background: var(--bg-dark);
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.stat-bar-fill.hp {
+  background: linear-gradient(90deg, #C62828 0%, #E53935 100%);
+}
+
+.stat-bar-fill.mp {
+  background: linear-gradient(90deg, #1565C0 0%, #42A5F5 100%);
+}
+
+.stat-bar-fill.exp {
+  background: linear-gradient(90deg, #6A1B9A 0%, #9C27B0 100%);
+}
+
+/* 标签页 */
+.qikan-tabs {
+  display: flex;
+  border-bottom: 2px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.qikan-tab {
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.qikan-tab::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--primary-color);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+.qikan-tab:hover {
+  color: var(--text-primary);
+}
+
+.qikan-tab.active {
+  color: var(--text-gold);
+}
+
+.qikan-tab.active::after {
+  transform: scaleX(1);
+}
+
+/* 动画效果 */
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 5px var(--secondary-color); }
+  50% { box-shadow: 0 0 20px var(--secondary-color), 0 0 30px var(--secondary-color); }
+}
+
+.glow-effect {
+  animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}

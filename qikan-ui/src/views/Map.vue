@@ -182,10 +182,12 @@ onMounted(() => {
 }
 
 .map-wrapper {
-  background: #16213e;
+  background: linear-gradient(145deg, #1E1E1E 0%, #151515 100%);
   border-radius: 12px;
   padding: 20px;
   overflow: auto;
+  border: 1px solid #3D3D3D;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .map-content {

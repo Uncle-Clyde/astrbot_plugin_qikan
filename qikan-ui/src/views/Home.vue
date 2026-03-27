@@ -7,18 +7,18 @@
         </div>
         <div class="header-center">
           <el-button-group>
-            <el-button @click="currentView = 'panel'">角色</el-button>
-            <el-button @click="currentView = 'inventory'">背包</el-button>
-            <el-button @click="$router.push('/skills')">技能</el-button>
-            <el-button @click="$router.push('/map')">地图</el-button>
-            <el-button @click="$router.push('/family')">家族</el-button>
-            <el-button @click="$router.push('/market')">集市</el-button>
-            <el-button @click="$router.push('/chat')">世界</el-button>
-            <el-button @click="$router.push('/icons')">图标</el-button>
+            <el-button @click="currentView = 'panel'" :type="currentView === 'panel' ? 'danger' : ''">⚔️ 角色</el-button>
+            <el-button @click="currentView = 'inventory'" :type="currentView === 'inventory' ? 'danger' : ''">🎒 背包</el-button>
+            <el-button @click="$router.push('/skills')">📜 技能</el-button>
+            <el-button @click="$router.push('/map')">🗺️ 地图</el-button>
+            <el-button @click="$router.push('/family')">🏰 家族</el-button>
+            <el-button @click="$router.push('/market')">🏛️ 集市</el-button>
+            <el-button @click="$router.push('/chat')">💬 世界</el-button>
+            <el-button @click="$router.push('/icons')">⚙️ 图标</el-button>
           </el-button-group>
         </div>
         <div class="header-right">
-          <el-button @click="handleLogout" type="danger" size="small">退出</el-button>
+          <el-button @click="handleLogout" type="danger" size="small">🚪 退出</el-button>
         </div>
       </el-header>
       
@@ -328,36 +328,65 @@ onMounted(() => {
 <style scoped>
 .home-container {
   min-height: 100vh;
-  background: #1a1a2e;
+  background: linear-gradient(180deg, #0D0D0D 0%, #1A1A1A 50%, #151515 100%);
 }
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #16213e;
-  border-bottom: 1px solid #0f3460;
+  background: linear-gradient(180deg, #1A1A1A 0%, #0D0D0D 100%);
+  border-bottom: 3px solid #8B0000;
+  padding: 0 24px;
+  height: 60px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
 }
 
 .header-left h2 {
-  color: #ffd700;
+  color: #FFD700;
   margin: 0;
+  font-size: 22px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8), 0 0 10px rgba(255, 215, 0, 0.3);
+  letter-spacing: 3px;
+  font-family: 'Microsoft YaHei', serif;
 }
 
 .header-center .el-button {
-  background: transparent;
-  border-color: #0f3460;
-  color: #e0e0e0;
+  background: linear-gradient(145deg, #252525 0%, #1A1A1A 100%);
+  border: 1px solid #3D3D3D;
+  color: #C4B59D;
+  font-weight: 500;
+  transition: all 0.3s ease;
 }
 
 .header-center .el-button:hover {
-  background: #0f3460;
+  background: linear-gradient(145deg, #8B0000 0%, #5C0000 100%);
+  border-color: #B22222;
+  color: #FFD700;
+  box-shadow: 0 0 12px rgba(139, 0, 0, 0.5);
 }
 
 .player-card, .equipment-card, .info-card, .status-card {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #e0e0e0;
+  background: linear-gradient(145deg, #252525 0%, #1E1E1E 100%);
+  border: 1px solid #3D3D3D;
+  color: #F5DEB3;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.player-card:hover, .equipment-card:hover {
+  border-color: #8B7355;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+}
+
+:deep(.el-card__header) {
+  background: linear-gradient(90deg, #1A1A1A 0%, #252525 100%);
+  border-bottom: 2px solid #8B0000;
+  padding: 14px 16px;
+}
+
+:deep(.el-card__body) {
+  padding: 20px;
 }
 
 .card-header {
@@ -366,93 +395,220 @@ onMounted(() => {
   align-items: center;
 }
 
+.card-header span {
+  color: #FFD700;
+  font-size: 18px;
+  font-weight: bold;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  border: 1px solid #2D2D2D;
 }
 
 .stat-item {
   text-align: center;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
 }
 
 .stat-item .label {
   display: block;
   color: #888;
   font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
 }
 
 .stat-item .value {
   display: block;
-  color: #ffd700;
-  font-size: 16px;
+  color: #FFD700;
+  font-size: 18px;
   font-weight: bold;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.3);
 }
 
 .action-buttons {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   justify-content: center;
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border: 1px solid #2D2D2D;
+}
+
+.action-buttons .el-button {
+  background: linear-gradient(145deg, #8B0000 0%, #5C0000 100%);
+  border: 1px solid #B22222;
+  color: #FFD700;
+  font-weight: bold;
+  transition: all 0.3s ease;
+}
+
+.action-buttons .el-button:hover {
+  background: linear-gradient(145deg, #B22222 0%, #8B0000 100%);
+  box-shadow: 0 4px 12px rgba(139, 0, 0, 0.5);
+  transform: translateY(-2px);
 }
 
 .equipment-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
+  gap: 16px;
 }
 
 .equip-slot {
   text-align: center;
-  padding: 15px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid #0f3460;
+  padding: 16px 12px;
+  background: linear-gradient(145deg, #1A1A1A 0%, #0F0F0F 100%);
+  border: 2px solid #5C4033;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.equip-slot::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(139, 115, 85, 0.1), transparent);
+  transition: left 0.5s ease;
+}
+
+.equip-slot:hover::before {
+  left: 100%;
 }
 
 .equip-slot:hover {
-  border-color: #ffd700;
+  background: linear-gradient(145deg, #3D2B1F 0%, #2D1F15 100%);
+  border-color: #D4AF37;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(212, 175, 55, 0.2);
 }
 
 .equip-slot.empty {
-  opacity: 0.6;
+  opacity: 0.7;
+}
+
+.equip-slot.equipped {
+  background: linear-gradient(145deg, #2D2416 0%, #1F1510 100%);
+  border-color: #D4AF37;
 }
 
 .slot-icon {
-  font-size: 24px;
+  font-size: 28px;
+  display: block;
+  margin-bottom: 6px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
 
 .slot-name {
   font-size: 12px;
-  color: #888;
-  margin-top: 5px;
+  color: #C4B59D;
+  font-weight: 500;
+  margin-top: 4px;
 }
 
 .slot-item {
-  font-size: 12px;
-  color: #ffd700;
-  margin-top: 5px;
+  font-size: 11px;
+  color: #FFD700;
+  margin-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
 }
 
 .slot-empty {
-  font-size: 11px;
+  font-size: 10px;
   color: #555;
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .equip-section {
-  margin-top: 20px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #3D3D3D;
 }
 
 .equip-section h4 {
-  color: #ffd700;
-  margin: 10px 0;
+  color: #D4AF37;
+  margin: 12px 0 16px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .location-info p, .status-info {
-  margin: 5px 0;
-  color: #e0e0e0;
+  margin: 8px 0;
+  color: #C4B59D;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  border-left: 3px solid #8B0000;
+}
+
+/* 标签样式 */
+:deep(.el-tag) {
+  border-color: #8B0000;
+  background: linear-gradient(145deg, #5C0000 0%, #3D0000 100%);
+  color: #FFD700;
+}
+
+/* 输入框样式 */
+:deep(.el-input__wrapper) {
+  background: #0D0D0D;
+  border: 1px solid #3D3D3D;
+  box-shadow: none;
+}
+
+:deep(.el-input__wrapper:hover) {
+  border-color: #8B7355;
+}
+
+:deep(.el-input__wrapper.is-focus) {
+  border-color: #D4AF37;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+}
+
+:deep(.el-input__inner) {
+  color: #F5DEB3;
+}
+
+/* 对话框样式 */
+:deep(.el-dialog) {
+  background: #1E1E1E;
+  border: 2px solid #3D3D3D;
+  border-radius: 8px;
+}
+
+:deep(.el-dialog__header) {
+  background: linear-gradient(90deg, #1A1A1A 0%, #252525 100%);
+  border-bottom: 2px solid #8B0000;
+}
+
+:deep(.el-dialog__title) {
+  color: #FFD700;
+}
+
+:deep(.el-dialog__body) {
+  color: #F5DEB3;
 }
 </style>
