@@ -1,0 +1,79 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.el-button--primary {
+  background: #ffd700;
+  border-color: #ffd700;
+  color: #1a1a2e;
+}
+
+.el-button--primary:hover {
+  background: #ffed4a;
+  border-color: #ffed4a;
+}
+
+.el-input__wrapper {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+
+.el-input__inner {
+  color: #e0e0e0;
+}
+
+.el-input__inner::placeholder {
+  color: #888;
+}
+
+.el-tabs__item {
+  color: #aaa;
+}
+
+.el-tabs__item.is-active {
+  color: #ffd700;
+}
+
+.el-table {
+  background: transparent;
+  color: #e0e0e0;
+}
+
+.el-table th.el-table__cell {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.el-table tr {
+  background: transparent;
+}
+
+.el-table--enable-row-hover .el-table__body tr:hover > td {
+  background: rgba(255, 215, 0, 0.1);
+}
+
+.el-dialog {
+  background: #16213e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.el-dialog__title {
+  color: #ffd700;
+}
+
+.el-message-box {
+  background: #16213e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
