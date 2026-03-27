@@ -1,0 +1,136 @@
+{
+  "version": "1.0",
+  "updated_at": "",
+  "icons": {
+    "weapon": {
+      "name": "武器",
+      "emoji": "⚔️",
+      "image": ""
+    },
+    "armor": {
+      "name": "护甲",
+      "emoji": "🛡️",
+      "image": ""
+    },
+    "helmet": {
+      "name": "头盔",
+      "emoji": "⛑️",
+      "image": ""
+    },
+    "gloves": {
+      "name": "手部",
+      "emoji": "🧤",
+      "image": ""
+    },
+    "boots": {
+      "name": "腿部",
+      "emoji": "👢",
+      "image": ""
+    },
+    "shoulder": {
+      "name": "肩甲",
+      "emoji": "🦺",
+      "image": ""
+    },
+    "accessory1": {
+      "name": "饰品1",
+      "emoji": "💍",
+      "image": ""
+    },
+    "accessory2": {
+      "name": "饰品2",
+      "emoji": "📿",
+      "image": ""
+    },
+    "mount": {
+      "name": "坐骑",
+      "emoji": "🐎",
+      "image": ""
+    },
+    "mount_armor": {
+      "name": "马甲",
+      "emoji": "🎽",
+      "image": ""
+    },
+    "mount_weapon": {
+      "name": "马战武器",
+      "emoji": "🔱",
+      "image": ""
+    },
+    "horse_armament": {
+      "name": "马具",
+      "emoji": "🪢",
+      "image": ""
+    },
+    "town": {
+      "name": "城镇",
+      "emoji": "🏰",
+      "image": ""
+    },
+    "castle": {
+      "name": "城堡",
+      "emoji": "⚔️",
+      "image": ""
+    },
+    "village": {
+      "name": "村庄",
+      "emoji": "🏘️",
+      "image": ""
+    },
+    "bandit": {
+      "name": "匪窝",
+      "emoji": "⛺",
+      "image": ""
+    },
+    "player": {
+      "name": "玩家",
+      "emoji": "👤",
+      "image": ""
+    },
+    "attack": {
+      "name": "攻击",
+      "emoji": "⚔️",
+      "image": ""
+    },
+    "defense": {
+      "name": "防御",
+      "emoji": "🛡️",
+      "image": ""
+    },
+    "hp": {
+      "name": "生命",
+      "emoji": "❤️",
+      "image": ""
+    },
+    "speed": {
+      "name": "速度",
+      "emoji": "⚡",
+      "image": ""
+    },
+    "coin": {
+      "name": "第纳尔",
+      "emoji": "💰",
+      "image": ""
+    },
+    "family": {
+      "name": "家族",
+      "emoji": "🏰",
+      "image": ""
+    },
+    "skill": {
+      "name": "技能",
+      "emoji": "📜",
+      "image": ""
+    },
+    "shop": {
+      "name": "商店",
+      "emoji": "🏪",
+      "image": ""
+    },
+    "market": {
+      "name": "市场",
+      "emoji": "🏛️",
+      "image": ""
+    }
+  }
+}

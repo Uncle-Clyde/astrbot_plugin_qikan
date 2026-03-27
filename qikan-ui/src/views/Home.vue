@@ -14,6 +14,7 @@
             <el-button @click="$router.push('/family')">家族</el-button>
             <el-button @click="$router.push('/market')">集市</el-button>
             <el-button @click="$router.push('/chat')">世界</el-button>
+            <el-button @click="$router.push('/icons')">图标</el-button>
           </el-button-group>
         </div>
         <div class="header-right">
@@ -96,6 +97,26 @@
                     <div class="slot-empty" v-else>未装备</div>
                   </div>
                 </div>
+
+                <div class="equip-section" v-if="player?.mounted">
+                  <h4>🐎 坐骑装备</h4>
+                  <div class="equip-grid">
+                    <div 
+                      v-for="slot in mountSlots" 
+                      :key="slot.key"
+                      class="equip-slot"
+                      :class="{ empty: !player?.equipped_mount_items?.[slot.key] }"
+                      @click="handleMountEquipClick(slot.key)"
+                    >
+                      <div class="slot-icon">{{ slot.icon }}</div>
+                      <div class="slot-name">{{ slot.name }}</div>
+                      <div class="slot-item" v-if="player?.equipped_mount_items?.[slot.key]">
+                        {{ player.equipped_mount_items[slot.key].name }}
+                      </div>
+                      <div class="slot-empty" v-else>未装备</div>
+                    </div>
+                  </div>
+                </div>
               </el-card>
             </el-col>
             
@@ -172,26 +193,55 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
+import { useIconStore } from '../stores/icons'
 import { ElMessage } from 'element-plus'
 
-const router = useRouter()
 const gameStore = useGameStore()
+const iconStore = useIconStore()
 
 const currentView = ref('panel')
 const equipDialogVisible = ref(false)
 const selectedEquip = ref(null)
 const selectedSlot = ref('')
 
-const equipmentSlots = [
-  { key: 'weapon', name: '武器', icon: '⚔️' },
-  { key: 'armor', name: '护甲', icon: '🛡️' },
-  { key: 'helmet', name: '头盔', icon: '⛑️' },
-  { key: 'gloves', name: '手部', icon: '🧤' },
-  { key: 'boots', name: '腿部', icon: '👢' },
-  { key: 'shoulder', name: '肩甲', icon: '🦺' },
-  { key: 'accessory1', name: '饰品1', icon: '💍' },
-  { key: 'accessory2', name: '饰品2', icon: '📿' }
-]
+const equipmentSlots = computed(() => {
+  const slots = [
+    { key: 'weapon', name: '武器' },
+    { key: 'armor', name: '护甲' },
+    { key: 'helmet', name: '头盔' },
+    { key: 'gloves', name: '手部' },
+    { key: 'boots', name: '腿部' },
+    { key: 'shoulder', name: '肩甲' },
+    { key: 'accessory1', name: '饰品1' },
+    { key: 'accessory2', name: '饰品2' }
+  ]
+  return slots.map(slot => ({
+    ...slot,
+    icon: iconStore.getIconContent(slot.key) || getDefaultIcon(slot.key)
+  }))
+})
+
+const mountSlots = computed(() => {
+  const slots = [
+    { key: 'mount', name: '坐骑' },
+    { key: 'mount_armor', name: '马甲' },
+    { key: 'mount_weapon', name: '马战武器' },
+    { key: 'horse_armament', name: '马具' }
+  ]
+  return slots.map(slot => ({
+    ...slot,
+    icon: iconStore.getIconContent(slot.key) || getDefaultIcon(slot.key)
+  }))
+})
+
+const getDefaultIcon = (key) => {
+  const defaults = {
+    weapon: '⚔️', armor: '🛡️', helmet: '⛑️', gloves: '🧤',
+    boots: '👢', shoulder: '🦺', accessory1: '💍', accessory2: '📿',
+    mount: '🐎', mount_armor: '🎽', mount_weapon: '🔱', horse_armament: '🪢'
+  }
+  return defaults[key] || '📦'
+}
 
 const player = computed(() => gameStore.player)
 
@@ -215,6 +265,14 @@ const getQualityName = (quality) => {
 const handleEquipClick = (slot) => {
   if (player.value?.equipment?.[slot]) {
     selectedEquip.value = player.value.equipment[slot]
+    selectedSlot.value = slot
+    equipDialogVisible.value = true
+  }
+}
+
+const handleMountEquipClick = (slot) => {
+  if (player.value?.equipped_mount_items?.[slot]) {
+    selectedEquip.value = player.value.equipped_mount_items[slot]
     selectedSlot.value = slot
     equipDialogVisible.value = true
   }
@@ -261,6 +319,7 @@ onMounted(() => {
     router.push('/')
     return
   }
+  iconStore.loadConfig()
   gameStore.getPanel()
   gameStore.getInventory()
 })
@@ -381,6 +440,15 @@ onMounted(() => {
   font-size: 11px;
   color: #555;
   margin-top: 5px;
+}
+
+.equip-section {
+  margin-top: 20px;
+}
+
+.equip-section h4 {
+  color: #ffd700;
+  margin: 10px 0;
 }
 
 .location-info p, .status-info {

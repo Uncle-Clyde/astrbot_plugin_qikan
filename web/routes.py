@@ -9,7 +9,7 @@ import secrets
 import time
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from ..game.engine import GameEngine
 from .access_guard import get_access_guard
@@ -1054,6 +1054,114 @@ def create_router(
         if not ok:
             return JSONResponse({"success": False, "message": "IP格式无效"}, status_code=400)
         return {"success": True, "message": f"已解除封禁：{ip}"}
+
+    # ==================== 图标管理 API ====================
+
+    @router.get("/api/icons/config")
+    async def get_icon_config():
+        """获取图标配置。"""
+        icons_dir = static_dir / "icons"
+        config_file = icons_dir / "config.json"
+        if not config_file.exists():
+            return JSONResponse({"success": False, "message": "图标配置文件不存在"}, status_code=404)
+        try:
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            return {"success": True, "config": config}
+        except Exception as e:
+            return JSONResponse({"success": False, "message": f"读取配置失败: {str(e)}"}, status_code=500)
+
+    @router.post("/api/admin/icons/update")
+    async def update_icon_config(request: Request):
+        """更新图标配置。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+
+        icon_key = body.get("icon_key", "")
+        emoji = body.get("emoji", "")
+        image = body.get("image", "")
+
+        icons_dir = static_dir / "icons"
+        config_file = icons_dir / "config.json"
+        if not config_file.exists():
+            return JSONResponse({"success": False, "message": "图标配置文件不存在"}, status_code=404)
+
+        try:
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            if icon_key not in config.get("icons", {}):
+                return JSONResponse({"success": False, "message": f"无效的图标key: {icon_key}"}, status_code=400)
+
+            config["icons"][icon_key]["emoji"] = emoji
+            config["icons"][icon_key]["image"] = image
+            config["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+            config_file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+            return {"success": True, "message": f"已更新图标: {config['icons'][icon_key]['name']}"}
+        except Exception as e:
+            return JSONResponse({"success": False, "message": f"更新配置失败: {str(e)}"}, status_code=500)
+
+    @router.post("/api/admin/icons/upload")
+    async def upload_icon(request: Request):
+        """上传图标图片。"""
+        admin_token = request.headers.get("X-Admin-Token", "")
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+
+        try:
+            form = await request.form()
+            icon_key = form.get("icon_key", "")
+            file = form.get("file")
+
+            if not file:
+                return JSONResponse({"success": False, "message": "未选择文件"}, status_code=400)
+
+            icons_dir = static_dir / "icons"
+            icons_dir.mkdir(exist_ok=True)
+
+            allowed_extensions = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+            file_ext = Path(file.filename).suffix.lower()
+            if file_ext not in allowed_extensions:
+                return JSONResponse({"success": False, "message": "不支持的图片格式"}, status_code=400)
+
+            filename = f"{icon_key}{file_ext}"
+            file_path = icons_dir / filename
+
+            content = await file.read()
+            file_path.write_bytes(content)
+
+            image_url = f"/static/icons/{filename}"
+
+            config_file = icons_dir / "config.json"
+            if config_file.exists():
+                config = json.loads(config_file.read_text(encoding="utf-8"))
+                if icon_key in config.get("icons", {}):
+                    config["icons"][icon_key]["image"] = image_url
+                    config["updated_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                    config_file.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+
+            return {"success": True, "message": "上传成功", "url": image_url}
+        except Exception as e:
+            return JSONResponse({"success": False, "message": f"上传失败: {str(e)}"}, status_code=500)
+
+    @router.get("/api/icons/{icon_key}")
+    async def get_icon(icon_key: str):
+        """获取指定图标。"""
+        icons_dir = static_dir / "icons"
+        for ext in [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"]:
+            file_path = icons_dir / f"{icon_key}{ext}"
+            if file_path.exists():
+                content = file_path.read_bytes()
+                mime_types = {
+                    ".png": "image/png",
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".gif": "image/gif",
+                    ".svg": "image/svg+xml",
+                    ".webp": "image/webp",
+                }
+                return Response(content, media_type=mime_types.get(ext, "image/png"))
+        return JSONResponse({"success": False, "message": "图标不存在"}, status_code=404)
 
     @router.post("/api/admin/overview")
     async def admin_overview(request: Request):
