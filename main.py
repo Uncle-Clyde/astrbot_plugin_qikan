@@ -1038,8 +1038,21 @@ class XiuxianPlugin(Star):
             return
         
         from .game.bandit_combat import engage_bandit
+        from .game.heal_skills import can_fight, check_injury_expired
         
-        result = await engage_bandit(player_id, bandit_id.strip())
+        player = self.engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("玩家数据异常")
+            return
+        
+        check_injury_expired(player)
+        
+        can, reason = can_fight(player)
+        if not can:
+            yield event.plain_result(reason)
+            return
+        
+        result = await engage_bandit(player, bandit_id.strip())
         
         if not result["success"]:
             yield event.plain_result(result["message"])
@@ -1063,7 +1076,13 @@ class XiuxianPlugin(Star):
         else:
             lines.append("")
             lines.append(f"你的血量: {result['player_hp']}/{result['player_max_hp']}")
-            lines.append(f"继续攻击以击败劫匪！")
+            
+            if result.get("injured"):
+                lines.append("")
+                lines.append("⚠️ 你受到重创，陷入重伤状态！")
+                lines.append("需要治疗才能恢复战斗能力。使用治疗技能或道具进行治疗。")
+            else:
+                lines.append(f"继续攻击以击败劫匪！")
         
         yield event.plain_result("\n".join(lines))
 
@@ -1140,6 +1159,72 @@ class XiuxianPlugin(Star):
         ]
         
         yield event.plain_result("\n".join(lines))
+
+    @xiuxian_group.command("治疗")
+    async def heal_command(self, event: AstrMessageEvent, skill_name: str = ""):
+        """治疗自己或治疗重伤状态。"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        from .game.heal_skills import (
+            can_fight, check_injury_expired, cure_injury,
+            HEAL_SKILLS, get_heal_skill
+        )
+        
+        check_injury_expired(player)
+        
+        if player.is_injured:
+            can, reason = can_fight(player)
+            if not can:
+                yield event.plain_result(f"你处于重伤状态：{reason}")
+                
+                if skill_name:
+                    skill = get_heal_skill(skill_name.strip())
+                    if not skill:
+                        yield event.plain_result(f"未找到医疗技能：{skill_name}")
+                        return
+                    
+                    result = cure_injury(player, skill)
+                    yield event.plain_result(result["message"])
+                    if result["cured"]:
+                        yield event.plain_result(f"生命已恢复至 {player.hp}/{player.max_hp}")
+                    return
+                
+                lines = ["你可以使用以下技能进行治疗：", ""]
+                for skill_id, skill in HEAL_SKILLS.items():
+                    if skill.skill_level_req <= getattr(player, 'heal_skill_level', 0):
+                        lines.append(f"• {skill.name} (消耗 {skill.stamina_cost * 3} 体力)")
+                lines.append("")
+                lines.append(f"使用方法：{self._cmd('治疗 <技能名>')}")
+                lines.append(f"例如：{self._cmd('治疗 战地医疗')}")
+                yield event.plain_result("\n".join(lines))
+                return
+        
+        if player.hp >= player.max_hp:
+            yield event.plain_result("你已经很健康，不需要治疗")
+            return
+        
+        if skill_name:
+            skill = get_heal_skill(skill_name.strip())
+            if not skill:
+                yield event.plain_result(f"未找到医疗技能：{skill_name}")
+                return
+            
+            from .game.heal_skills import use_heal_skill
+            result = use_heal_skill(player, skill.skill_id)
+            yield event.plain_result(result["message"])
+            if result.get("current_hp"):
+                yield event.plain_result(f"当前生命：{result['current_hp']}/{player.max_hp}")
+        else:
+            yield event.plain_result(f"当前生命：{player.hp}/{player.max_hp}")
+            yield event.plain_result(f"使用方法：{self._cmd('治疗 <技能名>')}")
 
     @xiuxian_group.command("等级")
     async def show_level(self, event: AstrMessageEvent):

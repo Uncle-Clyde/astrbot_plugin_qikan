@@ -75,7 +75,14 @@ async def engage_bandit(player, bandit_id: str) -> dict:
     
     if result["success"]:
         # 扣除玩家生命
-        player.hp = max(1, player.hp - bandit_damage)
+        player.hp = max(0, player.hp - bandit_damage)
+        
+        # 检查是否重伤
+        injured = False
+        if player.hp <= 0:
+            player.is_injured = True
+            player.hp = 1
+            injured = True
         
         if result["defeated"]:
             # 击败劫匪
@@ -114,6 +121,7 @@ async def engage_bandit(player, bandit_id: str) -> dict:
             result["player_max_hp"] = player_max_hp
             result["bandit_damage_taken"] = bandit_damage
             result["loot"] = loot
+            result["injured"] = injured
             
             # 升级信息
             if level_results:
@@ -127,6 +135,7 @@ async def engage_bandit(player, bandit_id: str) -> dict:
             result["player_hp"] = player.hp
             result["player_max_hp"] = player_max_hp
             result["bandit_damage_taken"] = bandit_damage
+            result["injured"] = injured
             return result
     
     return result

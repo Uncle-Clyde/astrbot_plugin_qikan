@@ -86,6 +86,10 @@ class Player:
     
     # 劫匪战斗统计
     bandit_stats: dict = field(default_factory=dict)  # {total_defeated, total_exp, total_gold, ...}
+    
+    # 重伤状态
+    is_injured: bool = False                     # 是否处于重伤状态
+    injured_until: float = 0.0                   # 重伤结束时间戳（0表示永久）
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
         """序列化为字典。include_sensitive=True 时包含密码哈希（仅用于存储）。"""
@@ -276,6 +280,8 @@ class Player:
             "level": self.level,
             "unallocated_points": self.unallocated_points,
             "bandit_stats": dict(self.bandit_stats),
+            "is_injured": self.is_injured,
+            "injured_until": self.injured_until,
         }
         if include_sensitive:
             d["password_hash"] = self.password_hash
@@ -359,4 +365,6 @@ class Player:
             level=data.get("level", 1),
             unallocated_points=data.get("unallocated_points", 0),
             bandit_stats=data.get("bandit_stats", {}),
+            is_injured=data.get("is_injured", False),
+            injured_until=data.get("injured_until", 0.0),
         )

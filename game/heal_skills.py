@@ -252,3 +252,81 @@ def format_heal_skills_list(player) -> str:
     lines.append(f"当前医疗技能等级: {skill_level}")
     
     return "\n".join(lines)
+
+
+def cure_injury(player, skill: HealSkill) -> dict:
+    """
+    使用医疗技能治疗重伤状态
+    
+    治疗重伤需要更高级的技能和更多的体力消耗
+    """
+    if not player.is_injured:
+        return {"success": False, "message": "你没有受伤，不需要治疗", "cured": False}
+    
+    skill_level = getattr(player, 'heal_skill_level', 0)
+    if skill.skill_level_req > skill_level:
+        return {
+            "success": False,
+            "message": f"需要医疗技能等级 {skill.skill_level_req + 1} 才能治疗重伤",
+            "cured": False,
+        }
+    
+    required_stamina = skill.stamina_cost * 3
+    if player.lingqi < required_stamina:
+        return {
+            "success": False,
+            "message": f"治疗重伤需要 {required_stamina} 点体力，你只有 {player.lingqi} 点",
+            "cured": False,
+        }
+    
+    if random.random() > skill.success_rate:
+        player.lingqi -= required_stamina
+        return {
+            "success": True,
+            "message": f"治疗失败，消耗了 {required_stamina} 点体力，但伤势未愈",
+            "cured": False,
+            "healed": 0,
+        }
+    
+    player.lingqi -= required_stamina
+    player.is_injured = False
+    player.injured_until = 0.0
+    player.hp = int(player.max_hp * 0.5)
+    
+    return {
+        "success": True,
+        "message": f"治疗成功！重伤状态已解除，生命恢复至 {player.hp}/{player.max_hp}",
+        "cured": True,
+        "hp_restored": player.hp,
+        "stamina_cost": required_stamina,
+    }
+
+
+def can_fight(player) -> tuple[bool, str]:
+    """
+    检查玩家是否可以战斗
+    
+    Returns:
+        (can_fight: bool, reason: str)
+    """
+    if player.is_injured:
+        return False, "你处于重伤状态，无法战斗，需要治疗才能恢复"
+    
+    if player.hp <= 0:
+        return False, "生命值为0，无法战斗"
+    
+    return True, ""
+
+
+def check_injury_expired(player) -> bool:
+    """检查 временные 重伤是否过期"""
+    if not player.is_injured:
+        return False
+    
+    if player.injured_until > 0 and time.time() >= player.injured_until:
+        player.is_injured = False
+        player.injured_until = 0.0
+        player.hp = int(player.max_hp * 0.3)
+        return True
+    
+    return False
