@@ -21,7 +21,7 @@ _MISSING = object()
 CMD_PREFIX = "骑砍"
 
 
-@register("astrbot_plugin_xiuxian", "xiuxian-dev", "骑砍文字RPG游戏，支持聊天指令和网页界面", "0.5.2")
+@register("astrbot_plugin_qikan", "qikan", "骑砍文字RPG游戏，支持聊天指令和网页界面", "0.5.2")
 class XiuxianPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
