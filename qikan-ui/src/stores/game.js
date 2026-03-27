@@ -44,8 +44,8 @@ export const useGameStore = defineStore('game', {
       return false
     },
 
-    async register(name, password) {
-      const res = await api.post('/api/register', { name, password })
+    async register(name, password, accessPassword = '') {
+      const res = await api.post('/api/register', { name, password, access_password: accessPassword })
       if (res.success) {
         ElMessage.success('注册成功，请登录')
         return true

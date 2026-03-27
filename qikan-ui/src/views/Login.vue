@@ -32,6 +32,9 @@
               <el-input v-model="registerForm.password" type="password" placeholder="密码" show-password />
             </el-form-item>
             <el-form-item>
+              <el-input v-model="registerForm.accessPassword" type="password" placeholder="访问密码（需要时填写）" show-password />
+            </el-form-item>
+            <el-form-item>
               <el-button type="primary" :loading="loading" @click="handleRegister" style="width: 100%">
                 注 册
               </el-button>
@@ -56,7 +59,7 @@ const activeTab = ref('login')
 const loading = ref(false)
 
 const loginForm = reactive({ name: '', password: '', adminKey: '' })
-const registerForm = reactive({ name: '', password: '' })
+const registerForm = reactive({ name: '', password: '', accessPassword: '' })
 
 const handleLogin = async () => {
   if (!loginForm.name || !loginForm.password) {
@@ -77,7 +80,7 @@ const handleRegister = async () => {
     return
   }
   loading.value = true
-  await gameStore.register(registerForm.name, registerForm.password)
+  await gameStore.register(registerForm.name, registerForm.password, registerForm.accessPassword)
   loading.value = false
   activeTab.value = 'login'
 }

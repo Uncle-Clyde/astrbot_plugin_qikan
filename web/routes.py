@@ -152,7 +152,7 @@ def create_router(
         if not required_web_password:
             return None
         provided = str(
-            body.get("access_password", body.get("admin_password", ""))
+            body.get("access_password", body.get("admin_password", body.get("admin_key", "")))
         ).strip()
         if not secrets.compare_digest(provided, required_web_password):
             return JSONResponse(
