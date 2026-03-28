@@ -71,33 +71,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '../stores/game'
-import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 const gameStore = useGameStore()
-
-const mapApi = axios.create({
-  baseURL: '',
-  timeout: 10000
-})
-
-mapApi.interceptors.request.use(config => {
-  const token = localStorage.getItem('qikan_token')
-  if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`
-  }
-  return config
-})
-
-mapApi.interceptors.response.use(
-  res => res.data,
-  err => {
-    ElMessage.error(err.response?.data?.message || '请求失败')
-    return Promise.reject(err)
-  }
-)
 
 const mapRef = ref(null)
 const locations = ref([])
@@ -125,32 +103,49 @@ const selectLocation = (loc) => {
   detailVisible.value = true
 }
 
-const handleTravel = async () => {
+const handleTravel = () => {
   if (!selectedLocation.value) return
-  try {
-    await mapApi.post(`/api/map/travel`, { location_id: selectedLocation.value.location_id })
-    ElMessage.success('开始旅行...')
-    detailVisible.value = false
-  } catch (e) {
-    ElMessage.error('旅行失败')
-  }
+  gameStore.send({ 
+    type: 'map_travel', 
+    data: { destination: selectedLocation.value.location_id } 
+  })
+  detailVisible.value = false
 }
 
-const loadLocations = async () => {
-  try {
-    const res = await mapApi.get('/api/map/locations')
-    locations.value = res.data.locations || []
-    
-    const playerRes = await mapApi.get('/api/map/player')
-    currentLocation.value = playerRes.data.location_id
+const loadLocations = () => {
+  gameStore.send({ type: 'get_map_locations' })
+  gameStore.send({ type: 'get_map_player' })
+}
+
+const handleWsMessage = (msg) => {
+  if (msg.type === 'map_locations') {
+    locations.value = msg.data || []
+  } else if (msg.type === 'map_player') {
+    currentLocation.value = msg.data.location_id
     playerLocation.value = locations.value.find(l => l.location_id === currentLocation.value)
-  } catch (e) {
-    ElMessage.error('加载地图失败')
+  } else if (msg.type === 'action_result') {
+    if (msg.data?.success) {
+      ElMessage.success(msg.data.message)
+      loadLocations()
+    } else {
+      ElMessage.error(msg.data?.message || '操作失败')
+    }
+  } else if (msg.type === 'state_update') {
+    ElMessage.success('状态已更新')
+    loadLocations()
   }
 }
 
 onMounted(() => {
+  gameStore.wsMessageHandlers = gameStore.wsMessageHandlers || {}
+  gameStore.wsMessageHandlers['map'] = handleWsMessage
   loadLocations()
+})
+
+onUnmounted(() => {
+  if (gameStore.wsMessageHandlers && gameStore.wsMessageHandlers['map']) {
+    delete gameStore.wsMessageHandlers['map']
+  }
 })
 </script>
 

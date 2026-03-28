@@ -121,7 +121,15 @@ export const useGameStore = defineStore('game', {
       }
     },
 
+    wsMessageHandlers: {},
+
     handleWsMessage(msg) {
+      if (this.wsMessageHandlers) {
+        for (const key in this.wsMessageHandlers) {
+          this.wsMessageHandlers[key](msg)
+        }
+      }
+      
       switch (msg.type) {
         case 'state_update':
           this.player = msg

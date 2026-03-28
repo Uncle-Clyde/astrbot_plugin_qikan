@@ -737,6 +737,65 @@ async def _handle_message(
             return {"type": "state_update", "data": panel}
         return {"type": "error", "message": "角色不存在"}
 
+    # ==================== 地图相关 ====================
+    elif msg_type == "get_map_locations":
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS
+        all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
+        locations = []
+        for loc_id, loc in all_locations.items():
+            locations.append({
+                "location_id": loc_id,
+                "name": loc["name"],
+                "type": loc["type"],
+                "x": loc["x"],
+                "y": loc["y"],
+                "description": loc.get("description", ""),
+                "faction": loc.get("faction", ""),
+            })
+        return {"type": "map_locations", "data": locations}
+
+    elif msg_type == "get_map_player":
+        player = await engine.get_player(user_id)
+        if not player:
+            return {"type": "error", "message": "角色不存在"}
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        if not map_state:
+            return {"type": "error", "message": "地图状态异常"}
+        return {"type": "map_player", "data": {
+            "location_id": map_state.current_location,
+            "x": map_state.x,
+            "y": map_state.y,
+            "travel_destination": map_state.travel_destination,
+            "travel_progress": map_state.travel_progress,
+        }}
+
+    elif msg_type == "map_travel":
+        destination = msg.get("data", {}).get("destination", "")
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS, calculate_map_travel_time
+        all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
+        dest_loc = all_locations.get(destination)
+        if not dest_loc:
+            return {"type": "error", "message": "目的地不存在"}
+        
+        player = await engine.get_player(user_id)
+        if not player:
+            return {"type": "error", "message": "角色不存在"}
+        
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        if not map_state:
+            return {"type": "error", "message": "地图状态异常"}
+        
+        map_state.travel_destination = destination
+        map_state.travel_progress = 0
+        map_state.travel_time = calculate_map_travel_time(
+            map_state.x, map_state.y, dest_loc["x"], dest_loc["y"]
+        )
+        
+        return {"type": "action_result", "action": "map_travel", "data": {
+            "success": True,
+            "message": f"开始前往{dest_loc['name']}，预计{map_state.travel_time}秒到达"
+        }}
+
     elif msg_type == "get_rankings":
         return {"type": "rankings_data", "data": _build_rankings_payload(engine, user_id)}
 
