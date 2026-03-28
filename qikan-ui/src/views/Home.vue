@@ -98,9 +98,21 @@
                   </div>
                 </div>
 
-                <div class="equip-section" v-if="player?.mounted">
+                <div class="equip-section">
                   <h4>🐎 坐骑装备</h4>
-                  <div class="equip-grid">
+                  <div class="mount-status" v-if="player?.mounted">
+                    <span class="mount-badge">已骑乘</span>
+                    <span class="mount-name">{{ player?.equipped_mount_info?.name || '' }}</span>
+                    <el-button size="small" type="danger" @click="handleUnequipMount">
+                      收回坐骑
+                    </el-button>
+                  </div>
+                  <div class="mount召唤" v-else>
+                    <el-button type="warning" @click="handleSummonMount">
+                      🐎 召唤坐骑
+                    </el-button>
+                  </div>
+                  <div class="equip-grid" style="margin-top: 12px;">
                     <div 
                       v-for="slot in mountSlots" 
                       :key="slot.key"
@@ -276,6 +288,14 @@ const handleMountEquipClick = (slot) => {
     selectedSlot.value = slot
     equipDialogVisible.value = true
   }
+}
+
+const handleSummonMount = () => {
+  gameStore.send({ type: 'get_inventory' })
+}
+
+const handleUnequipMount = () => {
+  gameStore.send({ type: 'unequip_mount' })
 }
 
 const handleEquipAction = async () => {
@@ -554,6 +574,41 @@ onMounted(() => {
   text-transform: uppercase;
   letter-spacing: 2px;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.mount-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(212, 175, 55, 0.1);
+  border: 1px solid #D4AF37;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.mount-badge {
+  background: linear-gradient(145deg, #D4AF37 0%, #8B7355 100%);
+  color: #000;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 12px;
+}
+
+.mount-name {
+  color: #FFD700;
+  font-weight: bold;
+  flex: 1;
+}
+
+.mount-召唤 {
+  padding: 12px;
+  background: rgba(139, 0, 0, 0.1);
+  border: 1px dashed #8B0000;
+  border-radius: 8px;
+  text-align: center;
+  margin-bottom: 12px;
 }
 
 .location-info p, .status-info {
