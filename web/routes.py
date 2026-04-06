@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import datetime
 from pathlib import Path
 import secrets
 import time
@@ -182,6 +183,10 @@ def create_router(
             return None
         return engine.auth.verify_web_token(token)
 
+    def _get_user_id(request: Request) -> str | None:
+        """从请求中获取已登录用户ID（复用 _verify_token）。"""
+        return _verify_token(request)
+
     def _create_admin_token() -> str:
         token = secrets.token_urlsafe(32)
         admin_tokens[token] = time.time() + ADMIN_TOKEN_EXPIRY
@@ -232,10 +237,50 @@ def create_router(
         )
         return response
 
+    @router.get("/spawn", response_class=HTMLResponse)
+    async def spawn_page(request: Request):
+        """提供出生点选择页面（SPA fallback）。"""
+        html = (static_dir / "index.html").read_text(encoding="utf-8")
+        page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
+        page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
+        if not page_client_id:
+            page_client_id = secrets.token_hex(16)
+        if required_guard_token:
+            ip = _client_ip(request)
+            ua = str(request.headers.get("user-agent", "")).strip().lower()
+            page_guard = access_guard.issue_page_session(
+                secret=required_guard_token,
+                ip=ip,
+                ua=ua,
+                client_key=page_client_id,
+                ttl_seconds=PAGE_GUARD_TTL_SECONDS,
+            )
+        
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+        ws_base = f"{scheme}://{host}"
+        
+        bootstrap = (
+            "<script>"
+            f"window.__XIUXIAN_PAGE_GUARD__ = {json.dumps(page_guard, ensure_ascii=False)};"
+            f"window.__XIUXIAN_WS_BASE__ = {json.dumps(ws_base, ensure_ascii=False)};"
+            "</script>"
+        )
+        html = re.sub(r'(<script\b)', f'{bootstrap}\n    \\1', html, count=1)
+        response = HTMLResponse(html)
+        response.set_cookie(
+            key="qikan_page_client",
+            value=page_client_id,
+            max_age=30 * 24 * 3600,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
     @router.get("/skills", response_class=HTMLResponse)
     async def skill_tree(request: Request):
-        """提供技能树页面。"""
-        html = (static_dir / "skills" / "index.html").read_text(encoding="utf-8")
+        """提供技能树页面（SPA fallback）。"""
+        html = (static_dir / "index.html").read_text(encoding="utf-8")
         page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
         page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
         if not page_client_id:
@@ -274,8 +319,53 @@ def create_router(
 
     @router.get("/map", response_class=HTMLResponse)
     async def map_page(request: Request):
-        """提供卡拉迪亚大陆地图页面。"""
-        html = (static_dir / "map" / "index.html").read_text(encoding="utf-8")
+        """提供卡拉迪亚大陆地图页面（SPA fallback）。"""
+        html = (static_dir / "index.html").read_text(encoding="utf-8")
+        page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
+        page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
+        if not page_client_id:
+            page_client_id = secrets.token_hex(16)
+        if required_guard_token:
+            ip = _client_ip(request)
+            ua = str(request.headers.get("user-agent", "")).strip().lower()
+            page_guard = access_guard.issue_page_session(
+                secret=required_guard_token,
+                ip=ip,
+                ua=ua,
+                client_key=page_client_id,
+                ttl_seconds=PAGE_GUARD_TTL_SECONDS,
+            )
+        
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        host = request.headers.get("x-forwarded-host", request.headers.get("host", ""))
+        ws_base = f"{scheme}://{host}"
+        
+        bootstrap = (
+            "<script>"
+            f"window.__XIUXIAN_PAGE_GUARD__ = {json.dumps(page_guard, ensure_ascii=False)};"
+            f"window.__XIUXIAN_WS_BASE__ = {json.dumps(ws_base, ensure_ascii=False)};"
+            "</script>"
+        )
+        html = re.sub(r'(<script\b)', f'{bootstrap}\n    \\1', html, count=1)
+        response = HTMLResponse(html)
+        response.set_cookie(
+            key="qikan_page_client",
+            value=page_client_id,
+            max_age=30 * 24 * 3600,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
+
+    @router.get("/family", response_class=HTMLResponse)
+    @router.get("/market", response_class=HTMLResponse)
+    @router.get("/chat", response_class=HTMLResponse)
+    @router.get("/icons", response_class=HTMLResponse)
+    @router.get("/admin", response_class=HTMLResponse)
+    @router.get("/about", response_class=HTMLResponse)
+    async def spa_fallback(request: Request):
+        """SPA fallback 路由 - 所有前端路由都返回 index.html。"""
+        html = (static_dir / "index.html").read_text(encoding="utf-8")
         page_guard = {"enabled": False, "page_id": "", "issued_at": 0, "signature": ""}
         page_client_id = str(request.cookies.get("qikan_page_client", "")).strip()
         if not page_client_id:
@@ -324,6 +414,32 @@ def create_router(
             "players_online": online,
         }
 
+    @router.get("/api/spawn/origins")
+    async def get_spawn_origins():
+        """获取所有出身选项。"""
+        from ..game.spawn_system import get_all_spawn_origins
+        origins = get_all_spawn_origins()
+        return {"success": True, "data": origins}
+
+    @router.get("/api/spawn/locations")
+    async def get_spawn_locations():
+        """获取所有出生地点。"""
+        from ..game.spawn_system import get_all_spawn_locations
+        locations = get_all_spawn_locations()
+        return {"success": True, "data": locations}
+
+    @router.get("/api/config")
+    async def get_config():
+        """获取服务器公开配置。"""
+        return {
+            "success": True,
+            "config": {
+                "require_access_password": bool(required_web_password),
+                "server_title": "骑砍英雄传",
+                "allow_register": True,
+            }
+        }
+
     # ==================== 认证 API ====================
 
     @router.post("/api/register")
@@ -340,7 +456,6 @@ def create_router(
         if not result["success"]:
             return JSONResponse(result, status_code=400)
 
-        # 自动登录，生成 token
         user_id = result["user_id"]
         token = await engine.auth.create_web_token(user_id)
         return {
@@ -349,6 +464,7 @@ def create_router(
             "token": token,
             "user_id": user_id,
             "is_admin": False,
+            "needs_spawn_selection": True,
         }
 
     @router.post("/api/login")
@@ -369,12 +485,14 @@ def create_router(
             )
 
         token = await engine.auth.create_web_token(player.user_id)
+        needs_spawn = not player.spawn_origin or player.spawn_origin == ""
         return {
             "success": True,
             "message": f"欢迎回来，{player.name}",
             "token": token,
             "user_id": player.user_id,
             "is_admin": False,
+            "needs_spawn_selection": needs_spawn,
         }
 
     @router.post("/api/set-password")
@@ -436,6 +554,21 @@ def create_router(
             "name": player.name,
             "is_admin": False,
         }
+
+    @router.post("/api/reset-character")
+    async def reset_character(request: Request):
+        """重置角色到初始状态（重新选择出身）。"""
+        user_id = _verify_token(request)
+        if not user_id:
+            return JSONResponse(
+                {"success": False, "message": "登录已过期，请重新登录"},
+                status_code=401,
+            )
+
+        result = await engine.reset_player(user_id)
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
 
     # ==================== 签到 API ====================
 
@@ -569,7 +702,106 @@ def create_router(
                 {"success": False, "message": "管理员登录已过期"},
                 status_code=401,
             )
-        return {"success": True, "is_admin": True}
+        session = engine.admin_manager.verify_token(admin_token)
+        level = session["level"] if session else 0
+        return {
+            "success": True,
+            "is_admin": True,
+            "level": level,
+            "can_customize_ui": level >= 3,
+            "can_manage_admins": level >= 4,
+            "can_upload_icons": level >= 3,
+        }
+
+    @router.post("/api/admin/ui-config")
+    async def admin_get_ui_config(request: Request):
+        """获取UI配置"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session:
+            return JSONResponse({"success": False, "message": "管理员未登录"}, status_code=401)
+        return {"success": True, "config": engine.get_ui_config()}
+
+    @router.post("/api/admin/ui-config/set")
+    async def admin_set_ui_config(request: Request):
+        """设置UI配置（需要lv4+）"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session:
+            return JSONResponse({"success": False, "message": "管理员未登录"}, status_code=401)
+        result = engine.set_ui_config(body.get("config", {}), session["level"])
+        if not result.get("success"):
+            return JSONResponse(result, status_code=403)
+        return result
+
+    @router.post("/api/admin/admins/list")
+    async def admin_list_admins(request: Request):
+        """管理员列表（需要lv5）"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session:
+            return JSONResponse({"success": False, "message": "管理员未登录"}, status_code=401)
+        if session["level"] < 5:
+            return JSONResponse({"success": False, "message": "权限不足，需要创始人级别"}, status_code=403)
+        admins = engine.admin_manager.list_admins()
+        return {"success": True, "admins": admins}
+
+    @router.post("/api/admin/admins/create")
+    async def admin_create_admin(request: Request):
+        """创建管理员（需要lv5）"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session:
+            return JSONResponse({"success": False, "message": "管理员未登录"}, status_code=401)
+        if session["level"] < 5:
+            return JSONResponse({"success": False, "message": "权限不足，需要创始人级别"}, status_code=403)
+        result = engine.admin_manager.create_admin(
+            body.get("username", ""),
+            body.get("password", ""),
+            body.get("level", 2),
+            session["username"],
+        )
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
+
+    @router.post("/api/admin/admins/update")
+    async def admin_update_admin(request: Request):
+        """更新管理员等级（需要lv5）"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session:
+            return JSONResponse({"success": False, "message": "管理员未登录"}, status_code=401)
+        if session["level"] < 5:
+            return JSONResponse({"success": False, "message": "权限不足，需要创始人级别"}, status_code=403)
+        result = engine.admin_manager.update_admin_level(
+            body.get("username", ""),
+            body.get("level", 1),
+            session["username"],
+        )
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
+
+    @router.post("/api/admin/admins/delete")
+    async def admin_delete_admin(request: Request):
+        """删除管理员（需要lv5）"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session:
+            return JSONResponse({"success": False, "message": "管理员未登录"}, status_code=401)
+        if session["level"] < 5:
+            return JSONResponse({"success": False, "message": "权限不足，需要创始人级别"}, status_code=403)
+        result = engine.admin_manager.delete_admin(body.get("username", ""), session["username"])
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
 
     @router.post("/api/admin/adventure-scenes/list")
     async def admin_list_adventure_scenes(request: Request):
@@ -679,6 +911,117 @@ def create_router(
         result = await engine.admin_delete_announcement(body.get("id"))
         if not result.get("success"):
             return JSONResponse(result, status_code=400)
+        return result
+
+    # ── 关于页面 ────────────────────────────────────────────
+    @router.get("/api/about")
+    async def get_about_page(request: Request):
+        """公开接口：获取关于页面内容。"""
+        data = await engine.get_about_page()
+        return {"success": True, "data": data}
+
+    @router.post("/api/admin/about")
+    async def admin_update_about_page(request: Request):
+        """管理员接口：更新关于页面。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+        result = await engine.admin_update_about_page(
+            body.get("acknowledgements", ""),
+            body.get("rules", ""),
+        )
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
+
+    # ── 数据库维护 ───────────────────────────────────────────
+    @router.post("/api/admin/db/health")
+    async def admin_db_health_check(request: Request):
+        """管理员接口：数据库健康检查。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+        result = await engine.admin_db_health_check()
+        return {"success": True, "data": result}
+
+    @router.post("/api/admin/db/vacuum")
+    async def admin_db_vacuum(request: Request):
+        """管理员接口：数据库优化（VACUUM）。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+        result = await engine.admin_db_vacuum()
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
+
+    @router.post("/api/admin/db/backup")
+    async def admin_db_backup(request: Request):
+        """管理员接口：数据库备份。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+        backup_path = str(body.get("backup_path", "")).strip()
+        if not backup_path:
+            return JSONResponse({"success": False, "message": "请指定备份路径"}, status_code=400)
+        result = await engine.admin_db_backup(backup_path)
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
+
+    @router.post("/api/admin/db/tables")
+    async def admin_get_table_info(request: Request):
+        """管理员接口：获取所有表的信息。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+        tables = await engine.admin_get_table_info()
+        return {"success": True, "tables": tables}
+
+    # ── 音效配置 ───────────────────────────────────────────
+    @router.get("/api/audio/config")
+    async def get_audio_config(request: Request):
+        """获取音效配置。"""
+        data = await engine.get_audio_config()
+        return {"success": True, "data": data}
+
+    @router.post("/api/audio/settings")
+    async def update_audio_settings(request: Request):
+        """玩家更新自己的音效设置。"""
+        body = await request.json()
+        user_id = _verify_token(request)
+        if not user_id:
+            return JSONResponse({"success": False, "message": "登录已过期"}, status_code=401)
+        
+        result = await engine.update_audio_settings(
+            enabled=body.get("enabled"),
+            music_enabled=body.get("music_enabled"),
+            sound_volume=body.get("sound_volume"),
+            music_volume=body.get("music_volume"),
+        )
+        return result
+
+    @router.post("/api/admin/audio/update")
+    async def admin_update_audio_files(request: Request):
+        """管理员接口：更新音效文件配置。"""
+        body = await request.json()
+        admin_token = str(body.get("admin_token", ""))
+        if not _verify_admin_token(admin_token):
+            return JSONResponse({"success": False, "message": "管理员登录已过期"}, status_code=401)
+        
+        session = engine.admin_manager.verify_token(admin_token) if engine.admin_manager else None
+        if not session or session.get("level", 0) < 5:
+            return JSONResponse({"success": False, "message": "仅LV5管理员可配置音效文件"}, status_code=403)
+        
+        audio_type = str(body.get("audio_type", "")).strip()
+        file_path = str(body.get("file_path", "")).strip()
+        
+        result = await engine.admin_update_audio_files(audio_type, file_path)
         return result
 
     @router.post("/api/admin/heart-methods/list")
@@ -1668,7 +2011,7 @@ def create_router(
         if not village:
             return {"success": False, "message": "村庄不存在"}
         
-        current_date = "2026-03-27"  # TODO: 实际获取当前日期
+        current_date = datetime.date.today().isoformat()
         
         result = {
             "success": True,
@@ -1770,9 +2113,7 @@ def create_router(
                 }
                 for q in available_quests[:5]
             ],
-            "gifts_value": sum(
-                10 for _ in gift_ids
-            ),
+            "gifts_value": calculate_gift_value(gift_ids),
         }
 
     @router.get("/api/village/{village_id}/quests")
@@ -1933,7 +2274,7 @@ def create_router(
             return {"success": False, "message": "玩家不存在"}
         
         state = get_village_state({}, user_id, village_id)
-        current_date = "2026-03-27"
+        current_date = datetime.date.today().isoformat()
         player_fame = getattr(player, 'fame', 0) if hasattr(player, 'fame') else 0
         
         daily = refresh_daily_quests(state, current_date, player_fame)
@@ -1954,5 +2295,652 @@ def create_router(
             "completed_count": len(state.daily_completed),
             "total_count": len(state.daily_quests),
         }
+
+    # ── 邮件系统 API ──────────────────────────────────────────────
+
+    @router.get("/api/mail/list")
+    async def get_mail_list(user_id: str):
+        """获取用户邮件列表。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        mails = await engine._data_manager.get_mails(user_id)
+        return {"success": True, "mails": mails}
+
+    @router.get("/api/mail/{mail_id}")
+    async def get_mail_detail(mail_id: int, user_id: str):
+        """获取邮件详情。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        mail = await engine._data_manager.get_mail(mail_id, user_id)
+        if not mail:
+            return {"success": False, "message": "邮件不存在"}
+        await engine._data_manager.mark_mail_read(mail_id, user_id)
+        return {"success": True, "mail": mail}
+
+    @router.post("/api/mail/send")
+    async def send_mail(sender_id: str, sender_name: str, receiver_id: str, title: str, content: str, attachments: str = "{}"):
+        """发送邮件。"""
+        if not sender_id or not receiver_id:
+            return {"success": False, "message": "参数不完整"}
+        mail_id = await engine._data_manager.send_mail(sender_id, sender_name, receiver_id, title, content, attachments)
+        return {"success": True, "mail_id": mail_id}
+
+    @router.post("/api/mail/{mail_id}/delete")
+    async def delete_mail(mail_id: int, user_id: str):
+        """删除邮件。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        success = await engine._data_manager.delete_mail(mail_id, user_id)
+        return {"success": success}
+
+    @router.post("/api/mail/{mail_id}/claim")
+    async def claim_mail_attachments(mail_id: int, user_id: str):
+        """领取邮件附件。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        mail = await engine._data_manager.get_mail(mail_id, user_id)
+        if not mail:
+            return {"success": False, "message": "邮件不存在"}
+        
+        attachments = mail.get("attachments", {})
+        if not attachments:
+            return {"success": False, "message": "无附件可领取"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        rewards = {}
+        if "stones" in attachments:
+            player.spirit_stones = getattr(player, 'spirit_stones', 0) + attachments["stones"]
+            rewards["stones"] = attachments["stones"]
+        if "items" in attachments:
+            rewards["items"] = attachments["items"]
+        
+        await engine._data_manager.delete_mail(mail_id, user_id)
+        
+        return {"success": True, "rewards": rewards}
+
+    # ── 成就系统 API ──────────────────────────────────────────────
+
+    @router.get("/api/achievements")
+    async def get_achievements(user_id: str = ""):
+        """获取成就列表和进度。"""
+        achievements = await engine._data_manager.get_all_achievements()
+        
+        player_achievements = {}
+        if user_id:
+            p_achievements = await engine._data_manager.get_player_achievements(user_id)
+            for pa in p_achievements:
+                player_achievements[pa["achievement_id"]] = pa
+        
+        for a in achievements:
+            pa = player_achievements.get(a["achievement_id"], {})
+            a["progress"] = pa.get("progress", 0)
+            a["completed"] = pa.get("completed", False)
+            a["claimed"] = pa.get("claimed", False)
+        
+        return {"success": True, "achievements": achievements}
+
+    @router.post("/api/achievements/{achievement_id}/claim")
+    async def claim_achievement_reward(achievement_id: str, user_id: str):
+        """领取成就奖励。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        p_achievements = await engine._data_manager.get_player_achievements(user_id)
+        pa = next((p for p in p_achievements if p["achievement_id"] == achievement_id), None)
+        
+        if not pa or not pa.get("completed"):
+            return {"success": False, "message": "成就未完成"}
+        if pa.get("claimed"):
+            return {"success": False, "message": "奖励已领取"}
+        
+        reward = await engine._data_manager.claim_achievement_reward(user_id, achievement_id)
+        if not reward:
+            return {"success": False, "message": "成就不存在"}
+        
+        if reward.get("reward_stones"):
+            player.spirit_stones = getattr(player, 'spirit_stones', 0) + reward["reward_stones"]
+        
+        if reward.get("reward_title"):
+            await engine._data_manager.grant_title(user_id, reward["reward_title"])
+        
+        return {"success": True, "reward": reward}
+
+    @router.post("/api/achievements/update-progress")
+    async def update_achievement_progress(user_id: str, achievement_id: str, progress: int):
+        """更新成就进度（游戏逻辑调用）。"""
+        if not user_id:
+            return {"success": False}
+        
+        achievements = await engine._data_manager.get_all_achievements()
+        achievement = next((a for a in achievements if a["achievement_id"] == achievement_id), None)
+        
+        if achievement:
+            await engine._data_manager.update_achievement_progress(user_id, achievement_id, progress)
+            
+            if progress >= achievement.get("condition_value", 0):
+                await engine._data_manager.complete_achievement(user_id, achievement_id)
+        
+        return {"success": True}
+
+    # ── 称号系统 API ──────────────────────────────────────────────
+
+    @router.get("/api/titles")
+    async def get_titles(user_id: str = ""):
+        """获取称号列表。"""
+        titles = await engine._data_manager.get_all_titles()
+        
+        player_titles = []
+        if user_id:
+            player_titles = await engine._data_manager.get_player_titles(user_id)
+            player_title_ids = {pt["title_id"]: pt for pt in player_titles}
+            for t in titles:
+                pt = player_title_ids.get(t["title_id"], {})
+                t["owned"] = True
+                t["is_active"] = pt.get("is_active", False)
+        
+        return {"success": True, "titles": titles, "player_titles": player_titles}
+
+    @router.post("/api/titles/activate")
+    async def activate_title(user_id: str, title_id: str):
+        """激活称号。"""
+        if not user_id or not title_id:
+            return {"success": False, "message": "参数不完整"}
+        
+        player_titles = await engine._data_manager.get_player_titles(user_id)
+        if not any(pt["title_id"] == title_id for pt in player_titles):
+            return {"success": False, "message": "未拥有该称号"}
+        
+        await engine._data_manager.activate_title(user_id, title_id)
+        return {"success": True}
+
+    @router.post("/api/titles/deactivate")
+    async def deactivate_title(user_id: str):
+        """停用称号。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        await engine._data_manager.deactivate_title(user_id)
+        return {"success": True}
+
+    # ── 铁匠铺/强化系统 API ──────────────────────────────────────────────
+
+    @router.get("/api/blacksmith/configs")
+    async def get_enhance_configs():
+        """获取强化配置。"""
+        configs = await engine._data_manager.get_enhance_configs()
+        return {"success": True, "configs": configs}
+
+    @router.post("/api/blacksmith/enhance")
+    async def enhance_equipment(user_id: str, equipment_type: str, current_level: int = 0):
+        """装备强化。"""
+        if not user_id:
+            return {"success": False, "message": "需要user_id"}
+        
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+        
+        config = await engine._data_manager.get_enhance_config(equipment_type, current_level + 1)
+        if not config:
+            return {"success": False, "message": "强化配置不存在"}
+        
+        cost = config.get("cost_stones", 0)
+        player_spirit_stones = getattr(player, 'spirit_stones', 0)
+        
+        if player_spirit_stones < cost:
+            return {"success": False, "message": f"第纳尔不足，需要{cost}第纳尔"}
+        
+        import random
+        success = random.random() < config.get("success_rate", 0.8)
+        
+        new_level = current_level + 1 if success else current_level
+        
+        player.spirit_stones = player_spirit_stones - cost
+        
+        await engine._data_manager.log_enhance(
+            user_id, equipment_type, equipment_type,
+            current_level, new_level, success, cost
+        )
+        
+        return {
+            "success": True,
+            "success_flag": success,
+            "new_level": new_level,
+            "cost": cost,
+            "bonus": {
+                "attack": config.get("bonus_attack", 0) if success else 0,
+                "defense": config.get("bonus_defense", 0) if success else 0,
+                "hp": config.get("bonus_hp", 0) if success else 0,
+            }
+        }
+
+    # ── 管理员 API ──────────────────────────────────────────────
+
+    def _verify_admin(request: Request) -> bool:
+        """验证管理员身份。"""
+        token = request.headers.get("X-Admin-Token", "")
+        if not token or token not in admin_tokens:
+            return False
+        if time.time() - admin_tokens.get(token, 0) > ADMIN_TOKEN_EXPIRY:
+            return False
+        return True
+
+    @router.get("/api/admin/achievements")
+    async def admin_get_achievements():
+        """管理员获取所有成就。"""
+        achievements = await engine._data_manager.get_all_achievements()
+        return {"success": True, "achievements": achievements}
+
+    @router.post("/api/admin/achievements")
+    async def admin_create_achievement(
+        request: Request,
+        achievement_id: str,
+        name: str,
+        description: str,
+        icon: str = "🏆",
+        condition_type: str = "kill_count",
+        condition_value: int = 100,
+        reward_stones: int = 0,
+        reward_items: str = "{}",
+        reward_title: str = "",
+        sort_order: int = 0,
+    ):
+        """管理员创建成就。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.admin_create_achievement(
+            achievement_id, name, description, icon,
+            condition_type, condition_value, reward_stones,
+            reward_items, reward_title, sort_order
+        )
+        return {"success": True}
+
+    @router.delete("/api/admin/achievements/{achievement_id}")
+    async def admin_delete_achievement(request: Request, achievement_id: str):
+        """管理员删除成就。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.admin_delete_achievement(achievement_id)
+        return {"success": True}
+
+    @router.get("/api/admin/titles")
+    async def admin_get_titles():
+        """管理员获取所有称号。"""
+        titles = await engine._data_manager.get_all_titles()
+        return {"success": True, "titles": titles}
+
+    @router.post("/api/admin/titles")
+    async def admin_create_title(
+        request: Request,
+        title_id: str,
+        name: str,
+        description: str,
+        icon: str = "📜",
+        color: str = "#FFD700",
+        prefix: str = "",
+        bonus_attack: int = 0,
+        bonus_defense: int = 0,
+        bonus_hp: int = 0,
+        is_system: int = 0,
+    ):
+        """管理员创建称号。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.admin_create_title(
+            title_id, name, description, icon, color, prefix,
+            bonus_attack, bonus_defense, bonus_hp, is_system
+        )
+        return {"success": True}
+
+    @router.delete("/api/admin/titles/{title_id}")
+    async def admin_delete_title(request: Request, title_id: str):
+        """管理员删除称号。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.admin_delete_title(title_id)
+        return {"success": True}
+
+    @router.post("/api/admin/titles/grant")
+    async def admin_grant_title(request: Request, user_id: str, title_id: str):
+        """管理员授予玩家称号。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.grant_title(user_id, title_id)
+        return {"success": True}
+
+    @router.get("/api/admin/enhance-configs")
+    async def admin_get_enhance_configs():
+        """管理员获取强化配置。"""
+        configs = await engine._data_manager.get_enhance_configs()
+        return {"success": True, "configs": configs}
+
+    @router.post("/api/admin/enhance-configs")
+    async def admin_save_enhance_config(
+        request: Request,
+        equipment_type: str,
+        level: int,
+        success_rate: float = 0.8,
+        cost_stones: int = 100,
+        cost_item_id: str = "",
+        cost_item_count: int = 1,
+        bonus_attack: int = 0,
+        bonus_defense: int = 0,
+        bonus_hp: int = 0,
+    ):
+        """管理员保存强化配置。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.admin_save_enhance_config(
+            equipment_type, level, success_rate, cost_stones,
+            cost_item_id, cost_item_count, bonus_attack, bonus_defense, bonus_hp
+        )
+        return {"success": True}
+
+    @router.delete("/api/admin/enhance-configs")
+    async def admin_delete_enhance_config(request: Request, equipment_type: str, level: int):
+        """管理员删除强化配置。"""
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        await engine._data_manager.admin_delete_enhance_config(equipment_type, level)
+        return {"success": True}
+
+    # ── 管理员对话配置管理 ──────────────────────────────────────────────
+
+    @router.get("/api/admin/dialog-config")
+    async def admin_get_dialog_config():
+        """管理员获取对话配置。"""
+        from ..game.npc_system import load_dialog_config, get_all_npc_configs
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        config = load_dialog_config()
+        return {
+            "success": True,
+            "config": config,
+            "npc_list": [
+                {
+                    "npc_id": npc_id,
+                    "name": npc_data.get("name", ""),
+                    "title": npc_data.get("title", ""),
+                    "icon": npc_data.get("icon", ""),
+                    "npc_type": npc_data.get("npc_type", ""),
+                    "dialog_node_count": len(npc_data.get("dialog", {})),
+                }
+                for npc_id, npc_data in config.get("npcs", {}).items()
+            ],
+        }
+
+    @router.post("/api/admin/dialog-config")
+    async def admin_save_dialog_config(request: Request):
+        """管理员保存对话配置。"""
+        from ..game.npc_system import save_dialog_config, reload_dialog_config
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        
+        if not body or "npcs" not in body:
+            return {"success": False, "message": "缺少npcs字段"}
+        
+        config = {
+            "version": body.get("version", "1.0.0"),
+            "npcs": body["npcs"],
+        }
+        
+        if save_dialog_config(config):
+            reload_dialog_config()
+            return {"success": True, "message": "对话配置已保存"}
+        else:
+            return {"success": False, "message": "保存失败"}
+
+    @router.post("/api/admin/dialog-config/npc")
+    async def admin_save_npc_dialog(request: Request):
+        """管理员保存单个NPC的对话配置。"""
+        from ..game.npc_system import load_dialog_config, save_dialog_config, reload_dialog_config
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        
+        npc_id = body.get("npc_id", "")
+        if not npc_id:
+            return {"success": False, "message": "缺少npc_id"}
+        
+        config = load_dialog_config()
+        if "npcs" not in config:
+            config["npcs"] = {}
+        
+        config["npcs"][npc_id] = body.get("npc_data", {})
+        
+        if save_dialog_config(config):
+            reload_dialog_config()
+            return {"success": True, "message": f"NPC {npc_id} 对话配置已保存"}
+        else:
+            return {"success": False, "message": "保存失败"}
+
+    @router.delete("/api/admin/dialog-config/npc")
+    async def admin_delete_npc_dialog(request: Request, npc_id: str):
+        """管理员删除NPC对话配置。"""
+        from ..game.npc_system import load_dialog_config, save_dialog_config, reload_dialog_config
+        if not _verify_admin(request):
+            return {"success": False, "message": "未授权"}
+        
+        config = load_dialog_config()
+        if "npcs" in config and npc_id in config["npcs"]:
+            del config["npcs"][npc_id]
+            if save_dialog_config(config):
+                reload_dialog_config()
+                return {"success": True, "message": f"NPC {npc_id} 对话配置已删除"}
+        
+        return {"success": False, "message": "NPC不存在"}
+
+    # ══════════════════════════════════════════════════════════════
+    # 同伴系统 API
+    # ══════════════════════════════════════════════════════════════
+
+    @router.get("/api/companions")
+    async def api_get_companions():
+        """获取同伴列表。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        return await engine.get_companions(user_id)
+
+    @router.post("/api/companions/recruit")
+    async def api_recruit_companion(request: Request):
+        """招募同伴。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.recruit_companion(user_id, body.get("companion_id", ""))
+
+    @router.post("/api/companions/gift")
+    async def api_give_companion_gift(request: Request):
+        """赠送同伴礼物。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.give_companion_gift(
+            user_id, body.get("companion_id", ""), body.get("gift_id", "")
+        )
+
+    @router.post("/api/companions/toggle")
+    async def api_toggle_companion_active(request: Request):
+        """切换同伴出战状态。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.toggle_companion_active(
+            user_id, body.get("companion_id", ""), body.get("active", False)
+        )
+
+    # ══════════════════════════════════════════════════════════════
+    # 部队系统 API
+    # ══════════════════════════════════════════════════════════════
+
+    @router.get("/api/troops")
+    async def api_get_troops():
+        """获取部队信息。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        return await engine.get_troops(user_id)
+
+    @router.post("/api/troops/recruit")
+    async def api_recruit_troops(request: Request):
+        """招募部队。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.recruit_troops(
+            user_id, body.get("troop_id", ""), int(body.get("count", 1))
+        )
+
+    @router.post("/api/troops/dismiss")
+    async def api_dismiss_troops(request: Request):
+        """解散部队。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.dismiss_troops(
+            user_id, body.get("troop_id", ""), int(body.get("count", 1))
+        )
+
+    # ══════════════════════════════════════════════════════════════
+    # 竞技场系统 API
+    # ══════════════════════════════════════════════════════════════
+
+    @router.get("/api/tournament")
+    async def api_get_tournament():
+        """获取竞技场信息。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        return await engine.get_tournament(user_id)
+
+    @router.post("/api/tournament/start")
+    async def api_start_tournament(request: Request):
+        """开始竞技场战斗。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.start_tournament_battle(user_id, body.get("opponent_id", ""))
+
+    @router.post("/api/tournament/end")
+    async def api_end_tournament(request: Request):
+        """结束竞技场战斗。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        return await engine.end_tournament_battle(
+            user_id, body.get("opponent_id", ""), body.get("won", False)
+        )
+
+    # ══════════════════════════════════════════════════════════════
+    # 头像系统 API
+    # ══════════════════════════════════════════════════════════════
+
+    @router.post("/api/avatar/upload")
+    async def api_upload_avatar(request: Request):
+        """玩家上传头像。"""
+        import os
+        import time
+        from pathlib import Path
+        from starlette.datastructures import UploadFile
+
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+
+        try:
+            form = await request.form()
+            file = form.get("avatar")
+            if not file or not hasattr(file, 'filename'):
+                return {"success": False, "message": "请选择文件"}
+
+            filename = str(file.filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext not in ('.jpg', '.jpeg', '.png', '.gif', '.webp'):
+                return {"success": False, "message": "仅支持 JPG/PNG/GIF/WEBP 格式"}
+
+            avatar_dir = Path("static") / "avatars"
+            avatar_dir.mkdir(parents=True, exist_ok=True)
+
+            avatar_path = avatar_dir / f"{user_id}{ext}"
+            content = await file.read()
+            if len(content) > 2 * 1024 * 1024:
+                return {"success": False, "message": "文件大小不能超过 2MB"}
+
+            with open(avatar_path, "wb") as f:
+                f.write(content)
+
+            avatar_url = f"/static/avatars/{user_id}{ext}"
+            player = await engine.get_player(user_id)
+            if player:
+                player.avatar_url = avatar_url
+                await engine._save_player(player)
+
+            return {"success": True, "message": "头像上传成功", "avatar_url": avatar_url}
+        except Exception as e:
+            return {"success": False, "message": f"上传失败: {str(e)}"}
+
+    @router.get("/api/avatar/{user_id}")
+    async def api_get_avatar(user_id: str):
+        """获取玩家头像URL。"""
+        from pathlib import Path
+        avatar_path = Path("static") / "avatars" / f"{user_id}.jpg"
+        for ext in ['.jpg', '.png', '.gif', '.webp', '.jpeg']:
+            check = Path("static") / "avatars" / f"{user_id}{ext}"
+            if check.exists():
+                return {"success": True, "avatar_url": f"/static/avatars/{user_id}{ext}"}
+        return {"success": False, "avatar_url": ""}
 
     return router

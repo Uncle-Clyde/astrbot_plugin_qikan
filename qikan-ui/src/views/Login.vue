@@ -7,7 +7,7 @@
     <div class="login-box">
       <div class="logo-section">
         <div class="sword-icon">⚔️</div>
-        <h1 class="title">骑砍英雄传</h1>
+        <h1 class="title">{{ serverTitle }}</h1>
         <p class="subtitle">MOUNT & BLADE</p>
       </div>
       
@@ -16,10 +16,19 @@
           <el-form :model="loginForm" @submit.prevent="handleLogin">
             <el-form-item>
               <el-input 
+                v-model="loginForm.accessPassword" 
+                type="password" 
+                placeholder="访问密码(可选)" 
+                prefix-icon="Key"
+                size="large"
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-input 
                 v-model="loginForm.name" 
                 placeholder="角色名" 
                 maxlength="12"
-                prefix-icon="👤"
+                prefix-icon="User"
                 size="large"
               />
             </el-form-item>
@@ -29,17 +38,7 @@
                 type="password" 
                 placeholder="密码" 
                 show-password
-                prefix-icon="🔑"
-                size="large"
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-input 
-                v-model="loginForm.adminKey" 
-                type="password" 
-                placeholder="访问密码（管理员设置）" 
-                show-password
-                prefix-icon="⚙️"
+                prefix-icon="Lock"
                 size="large"
               />
             </el-form-item>
@@ -50,6 +49,7 @@
                 @click="handleLogin" 
                 size="large"
                 class="login-btn"
+                :disabled="loading"
               >
                 ⚔️ 开始征程
               </el-button>
@@ -57,14 +57,23 @@
           </el-form>
         </el-tab-pane>
         
-        <el-tab-pane label="📜 注册" name="register">
+        <el-tab-pane label="📜 注册账号" name="register" v-if="serverConfig.allow_register">
           <el-form :model="registerForm" @submit.prevent="handleRegister">
+            <el-form-item>
+              <el-input 
+                v-model="registerForm.accessPassword" 
+                type="password" 
+                placeholder="访问密码(可选)" 
+                prefix-icon="Key"
+                size="large"
+              />
+            </el-form-item>
             <el-form-item>
               <el-input 
                 v-model="registerForm.name" 
                 placeholder="角色名" 
                 maxlength="12"
-                prefix-icon="👤"
+                prefix-icon="User"
                 size="large"
               />
             </el-form-item>
@@ -74,17 +83,7 @@
                 type="password" 
                 placeholder="密码" 
                 show-password
-                prefix-icon="🔑"
-                size="large"
-              />
-            </el-form-item>
-            <el-form-item>
-              <el-input 
-                v-model="registerForm.accessPassword" 
-                type="password" 
-                placeholder="访问密码（需要时填写）" 
-                show-password
-                prefix-icon="⚙️"
+                prefix-icon="Lock"
                 size="large"
               />
             </el-form-item>
@@ -96,7 +95,7 @@
                 size="large"
                 class="login-btn register-btn"
               >
-                📜 创建角色
+                📜 注册账号
               </el-button>
             </el-form-item>
           </el-form>
@@ -111,7 +110,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
 import { ElMessage } from 'element-plus'
@@ -122,32 +121,75 @@ const gameStore = useGameStore()
 const activeTab = ref('login')
 const loading = ref(false)
 
-const loginForm = reactive({ name: '', password: '', adminKey: '' })
+const serverConfig = reactive({
+  require_access_password: false,
+  server_title: '骑砍英雄传',
+  allow_register: true
+})
+
+const loginForm = reactive({ name: '', password: '', accessPassword: '' })
 const registerForm = reactive({ name: '', password: '', accessPassword: '' })
 
+const loadServerConfig = async () => {
+  try {
+    const resp = await fetch('/api/config')
+    const data = await resp.json()
+    if (data.success && data.config) {
+      Object.assign(serverConfig, data.config)
+    }
+  } catch (e) {
+    console.error('加载服务器配置失败', e)
+  }
+}
+
 const handleLogin = async () => {
+  if (serverConfig.require_access_password && !loginForm.accessPassword) {
+    ElMessage.warning('请输入访问密码')
+    return
+  }
   if (!loginForm.name || !loginForm.password) {
     ElMessage.warning('请输入角色名和密码')
     return
   }
   loading.value = true
-  const success = await gameStore.login(loginForm.name, loginForm.password, loginForm.adminKey)
+  const result = await gameStore.login(loginForm.name, loginForm.password, loginForm.accessPassword)
   loading.value = false
-  if (success) {
+  if (result.success) {
+    sessionStorage.setItem('needsSpawn', result.needsSpawn ? '1' : '0')
     router.push('/home')
   }
 }
 
 const handleRegister = async () => {
+  if (serverConfig.require_access_password && !registerForm.accessPassword) {
+    ElMessage.warning('请输入访问密码')
+    return
+  }
   if (!registerForm.name || !registerForm.password) {
     ElMessage.warning('请输入角色名和密码')
     return
   }
   loading.value = true
-  await gameStore.register(registerForm.name, registerForm.password, registerForm.accessPassword)
+  const result = await gameStore.register(
+    registerForm.name, 
+    registerForm.password, 
+    registerForm.accessPassword
+  )
   loading.value = false
-  activeTab.value = 'login'
+  if (result.success) {
+    ElMessage.success('注册成功！请登录')
+    activeTab.value = 'login'
+    loginForm.name = registerForm.name
+    loginForm.password = registerForm.password
+    registerForm.name = ''
+    registerForm.password = ''
+    registerForm.accessPassword = ''
+  }
 }
+
+onMounted(() => {
+  loadServerConfig()
+})
 </script>
 
 <style scoped>

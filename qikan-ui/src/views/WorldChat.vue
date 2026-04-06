@@ -16,7 +16,7 @@
       </div>
       <div class="chat-input">
         <el-input v-model="inputMsg" placeholder="发送消息..." @keyup.enter="sendMessage" />
-        <el-button type="primary" @click="sendMessage">发送</el-button>
+        <el-button type="primary" @click="sendMessage" :loading="gameStore.isButtonLoading('world_chat')">发送</el-button>
       </div>
     </el-card>
   </div>
@@ -24,8 +24,11 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
+import { ElMessage } from 'element-plus'
 
+const router = useRouter()
 const gameStore = useGameStore()
 const chatRef = ref(null)
 const inputMsg = ref('')
@@ -37,8 +40,17 @@ const getNameColor = (realm) => {
 
 const sendMessage = () => {
   if (inputMsg.value.trim()) {
+    if (!gameStore.lockAction('chat')) {
+      ElMessage.warning('发送太频繁，请稍后再发')
+      return
+    }
+    gameStore.setButtonLoading('world_chat', true)
     gameStore.sendWorldChat(inputMsg.value.trim())
     inputMsg.value = ''
+    setTimeout(() => {
+      gameStore.unlockAction('chat')
+      gameStore.setButtonLoading('world_chat', false)
+    }, 300)
   }
 }
 
@@ -50,7 +62,14 @@ const scrollToBottom = () => {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
+  if (!gameStore.token) {
+    router.push('/')
+    return
+  }
+  if (!gameStore.connected) {
+    await gameStore.connectWs()
+  }
   gameStore.getWorldChatHistory()
   scrollToBottom()
 })

@@ -9,7 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Optional
+import math
 import random
+import time
 
 
 class LocationType(IntEnum):
@@ -64,6 +66,7 @@ class Location:
     # 城镇特有
     shop_items: list[str] = field(default_factory=list)  # 商品列表
     tax_rate: float = 0.1  # 税率
+    has_blacksmith: bool = False  # 是否有铁匠铺
     
     # 村庄特有
     village_type: str = "普通"  # 普通/农业/畜牧/矿业
@@ -136,61 +139,61 @@ TOWNS: dict[str, Location] = {
         location_id="town_suno", name="苏诺", location_type=LocationType.TOWN,
         faction=Faction.VAEGIRS, x=680, y=150,
         level_range=(0, 3), description="维吉亚王国北部城市，商业繁荣",
-        shop_items=["grain", "iron", "cloth"], tax_rate=0.08,
+        shop_items=["grain", "iron", "cloth"], tax_rate=0.08, has_blacksmith=True,
     ),
     "town_reyvadin": Location(
         location_id="town_reyvadin", name="瑞瓦迪恩", location_type=LocationType.TOWN,
         faction=Faction.SWADIA, x=350, y=380,
         level_range=(2, 5), description="斯瓦迪亚王国中部大城市，军事要塞",
-        shop_items=["iron", "weapons", "armor"], tax_rate=0.12,
+        shop_items=["iron", "weapons", "armor"], tax_rate=0.12, has_blacksmith=True,
     ),
     "town_curin": Location(
         location_id="town_curin", name="库里姆", location_type=LocationType.TOWN,
         faction=Faction.RHODOKS, x=500, y=500,
         level_range=(3, 7), description="罗多克王国山城，矿业发达",
-        shop_items=["iron", "silver", "weapons"], tax_rate=0.10,
+        shop_items=["iron", "silver", "weapons"], tax_rate=0.10, has_blacksmith=True,
     ),
     "town_jelkala": Location(
         location_id="town_jelkala", name="贾尔卡拉", location_type=LocationType.TOWN,
         faction=Faction.RHODOKS, x=550, y=600,
         level_range=(5, 9), description="罗多克王国首都，繁华的商业都市",
-        shop_items=["luxury_goods", "iron", "cloth"], tax_rate=0.15,
+        shop_items=["luxury_goods", "iron", "cloth"], tax_rate=0.15, has_blacksmith=True,
     ),
     "town_dhirim": Location(
         location_id="town_dhirim", name="迪林姆", location_type=LocationType.TOWN,
         faction=Faction.SWADIA, x=400, y=450,
         level_range=(1, 4), description="斯瓦迪亚中部城镇，农业发达",
-        shop_items=["grain", "cattle", "cloth"], tax_rate=0.06,
+        shop_items=["grain", "cattle", "cloth"], tax_rate=0.06, has_blacksmith=True,
     ),
     "town_sargoth": Location(
         location_id="town_sargoth", name="萨戈斯", location_type=LocationType.TOWN,
         faction=Faction.NORDS, x=600, y=100,
         level_range=(4, 8), description="诺德王国港口城市，渔业繁荣",
-        shop_items=["fish", "iron", "timber"], tax_rate=0.10,
+        shop_items=["fish", "iron", "timber"], tax_rate=0.10, has_blacksmith=True,
     ),
     "town_pravend": Location(
         location_id="town_pravend", name="普拉文德", location_type=LocationType.TOWN,
         faction=Faction.SWADIA, x=200, y=350,
         level_range=(0, 3), description="斯瓦迪亚王国西部城镇，葡萄酒产地",
-        shop_items=["wine", "grain", "cattle"], tax_rate=0.07,
+        shop_items=["wine", "grain", "cattle"], tax_rate=0.07, has_blacksmith=True,
     ),
     "town_uxkhal": Location(
         location_id="town_uxkhal", name="乌克斯哈尔", location_type=LocationType.TOWN,
         faction=Faction.KHERGITS, x=850, y=400,
         level_range=(2, 6), description="库吉特汗国城市，草原贸易中心",
-        shop_items=["horses", "wool", "spices"], tax_rate=0.09,
+        shop_items=["horses", "wool", "spices"], tax_rate=0.09, has_blacksmith=True,
     ),
     "town_yalen": Location(
         location_id="town_yalen", name="亚伦", location_type=LocationType.TOWN,
         faction=Faction.SARRANIDS, x=300, y=650,
         level_range=(3, 7), description="萨兰德苏丹国港口，香料贸易中心",
-        shop_items=["spices", "silk", "dates"], tax_rate=0.11,
+        shop_items=["spices", "silk", "dates"], tax_rate=0.11, has_blacksmith=True,
     ),
-    "town_desh shapuri": Location(
+    "town_desh_shapuri": Location(
         location_id="town_desh_shapuri", name="德什沙普里", location_type=LocationType.TOWN,
         faction=Faction.SARRANIDS, x=250, y=700,
         level_range=(5, 9), description="萨兰德苏丹国首都，沙漠中的绿洲城市",
-        shop_items=["spices", "silk", "gold"], tax_rate=0.14,
+        shop_items=["spices", "silk", "gold"], tax_rate=0.14, has_blacksmith=True,
     ),
 }
 
@@ -496,8 +499,6 @@ def modify_faction_relation(player: "Player", faction: int, amount: int):
 # ══════════════════════════════════════════════════════════════
 # 骑砍风格动态劫匪系统
 # ══════════════════════════════════════════════════════════════
-
-import time
 
 
 class BanditType(IntEnum):
@@ -1120,7 +1121,6 @@ def calculate_map_travel_time(x1: float, y1: float, x2: float, y2: float, base_s
     计算两点间旅行时间（秒）。
     基于欧几里得距离。
     """
-    import math
     distance = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
     return distance / base_speed
 
@@ -1133,11 +1133,10 @@ def check_travel_encounter(distance: float, player_level: int) -> dict | None:
     encounter_chance = 0.15 + (distance / 1000) * 0.1
     encounter_chance = min(0.5, encounter_chance)
     
-    import random
     if random.random() < encounter_chance:
         bandit_types = list(BanditType)
         bandit_type = random.choice(bandit_types)
-        bandit = get_bandit_manager().spawn_bandit(bandit_type, 0, 0)
+        bandit = get_bandit_manager().spawn_bandit(player_level=player_level)
         
         scale = max(0.5, player_level / 10)
         bandit.level = max(1, int(bandit.level * scale))
@@ -1176,4 +1175,153 @@ def get_faction_color(faction: int) -> str:
         Faction.SARRANIDS: "#8B0000",
     }
     return colors.get(faction, "#808080")
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 玩家位置管理 (轻量级设计，支持100人在线)
+# ══════════════════════════════════════════════════════════════════════
+
+from threading import Lock
+
+# 玩家位置缓存: user_id -> PlayerMapPosition
+class PlayerMapPosition:
+    """玩家地图位置缓存"""
+    def __init__(self, user_id: str, name: str, x: float, y: float, realm: int, realm_name: str, icon: str = "👤"):
+        self.user_id = user_id
+        self.name = name
+        self.x = x
+        self.y = y
+        self.realm = realm
+        self.realm_name = realm_name
+        self.icon = icon
+        self.last_update = time.time()
+    
+    def to_dict(self) -> dict:
+        return {
+            "user_id": self.user_id,
+            "name": self.name,
+            "x": self.x,
+            "y": self.y,
+            "realm": self.realm,
+            "realm_name": self.realm_name,
+            "icon": self.icon,
+        }
+    
+    def distance_to(self, other_x: float, other_y: float) -> float:
+        """计算到另一点的距离"""
+        return math.sqrt((self.x - other_x) ** 2 + (self.y - other_y) ** 2)
+
+
+class PlayerPositionManager:
+    """玩家位置管理器 - 线程安全"""
+    
+    def __init__(self):
+        self._positions: dict[str, PlayerMapPosition] = {}
+        self._lock = Lock()
+        self._nearby_cache: dict[str, tuple[float, list]] = {}  # user_id -> (cache_time, nearby_list)
+        self._nearby_cache_ttl = 2.0  # 缓存2秒
+    
+    def update_position(self, user_id: str, name: str, x: float, y: float, realm: int, realm_name: str, icon: str = "👤"):
+        """更新玩家位置"""
+        with self._lock:
+            self._positions[user_id] = PlayerMapPosition(user_id, name, x, y, realm, realm_name, icon)
+            self._nearby_cache.clear()  # 清除附近缓存
+    
+    def remove_player(self, user_id: str):
+        """移除玩家"""
+        with self._lock:
+            self._positions.pop(user_id, None)
+            self._nearby_cache.pop(user_id, None)
+    
+    def get_player(self, user_id: str) -> PlayerMapPosition | None:
+        """获取单个玩家位置"""
+        return self._positions.get(user_id)
+    
+    def get_all_positions(self) -> list[dict]:
+        """获取所有玩家位置"""
+        with self._lock:
+            return [p.to_dict() for p in self._positions.values()]
+    
+    def get_nearby_players(self, user_id: str, radius: float = 150) -> list[dict]:
+        """获取附近玩家 (带缓存，2秒TTL)"""
+        current_time = time.time()
+        
+        # 检查缓存
+        cached = self._nearby_cache.get(user_id)
+        if cached:
+            cache_time, nearby_list = cached
+            if current_time - cache_time < self._nearby_cache_ttl:
+                return nearby_list
+        
+        player = self._positions.get(user_id)
+        if not player:
+            return []
+        
+        nearby = []
+        with self._lock:
+            for other in self._positions.values():
+                if other.user_id == user_id:
+                    continue
+                if player.distance_to(other.x, other.y) <= radius:
+                    nearby.append(other.to_dict())
+        
+        # 更新缓存
+        self._nearby_cache[user_id] = (current_time, nearby)
+        return nearby
+    
+    def broadcast_to_nearby(self, user_id: str, radius: float = 150) -> list[str]:
+        """获取附近玩家的user_id列表，用于WebSocket广播"""
+        nearby = self.get_nearby_players(user_id, radius)
+        return [p["user_id"] for p in nearby]
+
+
+def arrive_at_location(map_state: PlayerMapState, destination_id: str) -> dict:
+    """
+    玩家到达目的地，更新位置状态。
+    
+    Args:
+        map_state: 玩家地图状态
+        destination_id: 目的地ID
+    
+    Returns:
+        dict: 到达结果
+    """
+    dest_loc = ALL_LOCATIONS.get(destination_id)
+    if not dest_loc:
+        return {"success": False, "message": "目的地不存在"}
+    
+    map_state.current_location = destination_id
+    map_state.x = dest_loc.x
+    map_state.y = dest_loc.y
+    map_state.travel_progress = 0.0
+    map_state.travel_destination = ""
+    map_state.travel_time = 0.0
+    
+    type_name = {
+        LocationType.TOWN: "城镇",
+        LocationType.VILLAGE: "村庄",
+        LocationType.CASTLE: "城堡",
+        LocationType.BANDIT_CAMP: "匪窝",
+    }.get(dest_loc.location_type, "据点")
+    
+    return {
+        "success": True,
+        "message": f"已到达{dest_loc.name}（{type_name}）",
+        "location_id": destination_id,
+        "location_name": dest_loc.name,
+        "location_type": dest_loc.location_type,
+        "x": dest_loc.x,
+        "y": dest_loc.y,
+    }
+
+
+# 全局实例
+_player_position_manager = None
+
+def get_position_manager() -> 'PlayerPositionManager':
+    """获取位置管理器实例"""
+    global _player_position_manager
+    if _player_position_manager is None:
+        _player_position_manager = PlayerPositionManager()
+    return _player_position_manager
 

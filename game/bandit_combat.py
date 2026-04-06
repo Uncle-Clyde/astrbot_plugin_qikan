@@ -13,13 +13,13 @@ from .constants import (
     EQUIPMENT_REGISTRY, EquipmentTier,
 )
 from .inventory import add_item
+from .combat import CombatEngine
 
 
 def calculate_damage(attack: int, defense: int, multiplier: float = 1.0) -> int:
-    """计算伤害。"""
-    base = max(1, attack * 2 - defense)
-    variance = random.uniform(0.8, 1.2)
-    return max(1, int(base * multiplier * variance))
+    """计算伤害 - 使用统一战斗公式。"""
+    dmg, _ = CombatEngine._calc_damage(attack, defense, False, 0, 0)
+    return max(1, int(dmg * multiplier))
 
 
 def get_player_stats(player) -> dict:
@@ -116,6 +116,8 @@ async def engage_bandit(player, bandit_id: str) -> dict:
             
             # 随机战利品
             loot = get_random_loot_for_bandit(player, bandit.level)
+            if loot:
+                await add_item(player, loot["item_id"])
             
             result["player_hp"] = player.hp
             result["player_max_hp"] = player_max_hp
@@ -172,10 +174,6 @@ def get_random_loot_for_bandit(player, bandit_level: int) -> dict | None:
     
     item = random.choice(candidates)
     
-    # 添加到玩家背包
-    import asyncio
-    asyncio.create_task(add_item(player, item.equip_id))
-    
     return {
         "item_id": item.equip_id,
         "item_name": item.name,
@@ -216,6 +214,9 @@ async def check_random_encounter(player) -> dict | None:
     
     # 移动时可能遇到新的劫匪
     if random.random() > 0.1:  # 10%概率遇到
+        return None
+    
+    if not hasattr(player, 'map_state') or not player.map_state:
         return None
     
     # 找一个未被玩家发现的劫匪

@@ -1,7 +1,8 @@
 """
 骑砍风格医疗技能系统
 
-医疗是玩家恢复生命值的主要手段。
+医疗技能基于玩家的急救/草药学/外科手术技能等级，
+治疗消耗体力(lingqi)。
 """
 
 from __future__ import annotations
@@ -20,98 +21,88 @@ class HealSkill:
         description: str,
         base_heal: int,
         cooldown: int,
-        stamina_cost: int,
-        success_rate: float = 1.0,
+        lingqi_cost: int,
         skill_level_req: int = 0,
+        skill_type: str = "first_aid",  # first_aid, surgery
+        can_cure_injury: bool = False,
     ):
         self.skill_id = skill_id
         self.name = name
         self.description = description
         self.base_heal = base_heal
         self.cooldown = cooldown
-        self.stamina_cost = stamina_cost
-        self.success_rate = success_rate
+        self.lingqi_cost = lingqi_cost
         self.skill_level_req = skill_level_req
+        self.skill_type = skill_type
+        self.can_cure_injury = can_cure_injury
 
 
 HEAL_SKILLS: dict[str, HealSkill] = {
-    "basic_bandage": HealSkill(
-        skill_id="basic_bandage",
+    # 急救技能 (需要 FIRST_AID 技能)
+    "bandage": HealSkill(
+        skill_id="bandage",
         name="战场包扎",
-        description="基础的战场急救技能，用绷带包扎伤口",
+        description="基础的战场急救，用绷带止血",
         base_heal=30,
-        cooldown=60,
-        stamina_cost=10,
-        skill_level_req=0,
+        cooldown=30,
+        lingqi_cost=10,
+        skill_level_req=1,
+        skill_type="first_aid",
     ),
     "field_dressing": HealSkill(
         skill_id="field_dressing",
         name="野战救护",
-        description="在恶劣环境下进行紧急救护的能力",
+        description="在恶劣环境下进行紧急救护",
         base_heal=60,
-        cooldown=90,
-        stamina_cost=15,
-        skill_level_req=1,
+        cooldown=60,
+        lingqi_cost=15,
+        skill_level_req=3,
+        skill_type="first_aid",
     ),
     "battlefield_medicine": HealSkill(
         skill_id="battlefield_medicine",
         name="战地医疗",
-        description="专业的战地医疗知识和技术",
+        description="专业的战地医疗知识",
         base_heal=100,
-        cooldown=120,
-        stamina_cost=20,
-        success_rate=0.95,
-        skill_level_req=2,
+        cooldown=90,
+        lingqi_cost=20,
+        skill_level_req=5,
+        skill_type="first_aid",
     ),
+    
+    # 外科手术技能 (需要 SURGERY 技能)
     "field_surgery": HealSkill(
         skill_id="field_surgery",
         name="野战外科",
-        description="处理重伤员的外科手术技能",
+        description="处理重伤员的外科手术",
         base_heal=180,
-        cooldown=180,
-        stamina_cost=30,
-        success_rate=0.9,
-        skill_level_req=3,
+        cooldown=120,
+        lingqi_cost=30,
+        skill_level_req=1,
+        skill_type="surgery",
+        can_cure_injury=True,
     ),
     "trauma_treatment": HealSkill(
         skill_id="trauma_treatment",
         name="创伤治疗",
-        description="处理各种创伤的专业医疗技术",
+        description="处理各种创伤的专业技术",
         base_heal=280,
-        cooldown=240,
-        stamina_cost=40,
-        success_rate=0.85,
+        cooldown=180,
+        lingqi_cost=40,
         skill_level_req=4,
+        skill_type="surgery",
+        can_cure_injury=True,
     ),
     "master_surgeon": HealSkill(
         skill_id="master_surgeon",
         name="外科大师",
         description="精通各种外科手术的大师级技能",
         base_heal=400,
-        cooldown=300,
-        stamina_cost=50,
-        success_rate=0.8,
-        skill_level_req=5,
-    ),
-    "battle_healer": HealSkill(
-        skill_id="battle_healer",
-        name="战地治愈者",
-        description="在战斗中快速治愈伤口的能力",
-        base_heal=250,
-        cooldown=60,
-        stamina_cost=25,
-        success_rate=0.9,
-        skill_level_req=3,
-    ),
-    "triage": HealSkill(
-        skill_id="triage",
-        name="伤员检伤分类",
-        description="快速评估和分类伤员救治优先级",
-        base_heal=150,
-        cooldown=45,
-        stamina_cost=15,
-        success_rate=0.95,
-        skill_level_req=2,
+        cooldown=240,
+        lingqi_cost=50,
+        skill_level_req=7,
+        skill_type="surgery",
+        can_cure_injury=True,
     ),
 }
 
@@ -126,21 +117,33 @@ def get_all_heal_skills() -> list[HealSkill]:
     return list(HEAL_SKILLS.values())
 
 
-def get_heal_skill_by_level(level: int) -> list[HealSkill]:
+def get_available_heal_skills(first_aid_level: int, surgery_level: int) -> list[HealSkill]:
     """根据技能等级获取可用技能"""
-    return [s for s in HEAL_SKILLS.values() if s.skill_level_req <= level]
+    available = []
+    for skill in HEAL_SKILLS.values():
+        if skill.skill_type == "first_aid" and first_aid_level >= skill.skill_level_req:
+            available.append(skill)
+        elif skill.skill_type == "surgery" and surgery_level >= skill.skill_level_req:
+            available.append(skill)
+    return available
 
 
 def calculate_heal(player, skill: HealSkill) -> int:
     """
     计算实际治疗量
     
-    治疗量 = 基础治疗量 × (1 + 活力加成)
+    治疗量 = 基础治疗量 × (1 + 技能加成)
     """
-    vitality_bonus = 1.0 + (player.attributes.vitality if hasattr(player, 'attributes') else 0) * 0.02
+    first_aid_level = player.skills.get(30, 0)  # FIRST_AID
+    surgery_level = player.skills.get(32, 0)  # SURGERY
     
-    heal_amount = int(skill.base_heal * vitality_bonus)
+    skill_level = first_aid_level if skill.skill_type == "first_aid" else surgery_level
     
+    from .mb_attributes import get_skill_bonus
+    bonus = get_skill_bonus(30 if skill.skill_type == "first_aid" else 32, skill_level)
+    heal_bonus = bonus.get("heal_effect", 0)
+    
+    heal_amount = int(skill.base_heal * (1 + heal_bonus))
     heal_amount = min(heal_amount, player.max_hp - player.hp)
     
     return max(0, heal_amount)
@@ -157,11 +160,19 @@ def use_heal_skill(player, skill_id: str) -> dict:
     if not skill:
         return {"success": False, "message": "未知的医疗技能", "healed": 0}
     
-    skill_level = getattr(player, 'heal_skill_level', 0)
-    if skill.skill_level_req > skill_level:
+    first_aid_level = player.skills.get(30, 0)
+    surgery_level = player.skills.get(32, 0)
+    
+    if skill.skill_type == "first_aid" and first_aid_level < skill.skill_level_req:
         return {
             "success": False, 
-            "message": f"需要医疗技能等级 {skill.skill_level_req} 才能使用此技能",
+            "message": f"需要急救技能 {skill.skill_level_req} 级才能使用此技能",
+            "healed": 0
+        }
+    elif skill.skill_type == "surgery" and surgery_level < skill.skill_level_req:
+        return {
+            "success": False, 
+            "message": f"需要外科手术技能 {skill.skill_level_req} 级才能使用此技能",
             "healed": 0
         }
     
@@ -178,29 +189,17 @@ def use_heal_skill(player, skill_id: str) -> dict:
             "healed": 0
         }
     
-    if player.lingqi < skill.stamina_cost:
+    if player.lingqi < skill.lingqi_cost:
         return {
             "success": False,
-            "message": f"体力不足，需要 {skill.stamina_cost} 点体力",
+            "message": f"体力不足，需要 {skill.lingqi_cost} 点体力",
             "healed": 0
         }
     
-    player.lingqi -= skill.stamina_cost
-    
-    if random.random() > skill.success_rate:
-        heal_amount = int(calculate_heal(player, skill) * 0.5)
-        if heal_amount > 0:
-            player.hp += heal_amount
-        player.skill_cooldowns[skill_id] = current_time
-        return {
-            "success": True,
-            "message": f"治疗失误，勉强恢复 {heal_amount} 点生命",
-            "healed": heal_amount,
-            "skill_name": skill.name,
-        }
+    player.lingqi -= skill.lingqi_cost
     
     heal_amount = calculate_heal(player, skill)
-    player.hp += heal_amount
+    player.hp = min(player.max_hp, player.hp + heal_amount)
     player.skill_cooldowns[skill_id] = current_time
     
     heal_pct = (heal_amount / player.max_hp) * 100
@@ -232,101 +231,81 @@ def get_skill_cooldown(player, skill_id: str) -> int:
 
 def format_heal_skills_list(player) -> str:
     """格式化医疗技能列表"""
-    skill_level = getattr(player, 'heal_skill_level', 0)
+    first_aid_level = player.skills.get(30, 0)
+    surgery_level = player.skills.get(32, 0)
+    
     lines = ["🏥 医疗技能：", ""]
     
     for skill in HEAL_SKILLS.values():
-        available = skill.skill_level_req <= skill_level
+        if skill.skill_type == "first_aid":
+            player_level = first_aid_level
+            skill_name = "急救"
+        else:
+            player_level = surgery_level
+            skill_name = "外科"
+        
+        available = player_level >= skill.skill_level_req
         cooldown = get_skill_cooldown(player, skill.skill_id)
         
-        status = "✅" if available else f"🔒 (需要等级{skill.skill_level_req})"
         if cooldown > 0:
-            status = f"⏳ ({cooldown}秒)"
+            status = f"⏳ 冷却中({cooldown}秒)"
+        elif available:
+            status = "✅ 可用"
+        else:
+            status = f"🔒 需要{skill_name}{skill.skill_level_req}级"
         
         max_heal = calculate_heal(player, skill)
         lines.append(f"{status} {skill.name}")
-        lines.append(f"   治疗量: {skill.base_heal}-{max_heal} | 体力消耗: {skill.stamina_cost} | 冷却: {skill.cooldown}秒")
+        lines.append(f"   治疗量: {skill.base_heal}~{max_heal} | 体力消耗: {skill.lingqi_cost} | 冷却: {skill.cooldown}秒")
+        if skill.can_cure_injury:
+            lines.append(f"   ⚕️ 可治疗重伤")
         lines.append(f"   {skill.description}")
         lines.append("")
     
-    lines.append(f"当前医疗技能等级: {skill_level}")
+    lines.append(f"当前技能等级: 急救 {first_aid_level}级 | 外科 {surgery_level}级")
     
     return "\n".join(lines)
 
 
-def cure_injury(player, skill: HealSkill) -> dict:
+def cure_injury_with_skill(player, skill: HealSkill) -> dict:
     """
     使用医疗技能治疗重伤状态
     
-    治疗重伤需要更高级的技能和更多的体力消耗
+    治疗重伤需要外科手术技能和更多体力
     """
-    if not player.is_injured:
-        return {"success": False, "message": "你没有受伤，不需要治疗", "cured": False}
+    if not skill.can_cure_injury:
+        return {"success": False, "message": "该技能无法治疗重伤", "cured": False}
     
-    skill_level = getattr(player, 'heal_skill_level', 0)
-    if skill.skill_level_req > skill_level:
+    surgery_level = player.skills.get(32, 0)
+    if surgery_level < skill.skill_level_req:
         return {
             "success": False,
-            "message": f"需要医疗技能等级 {skill.skill_level_req + 1} 才能治疗重伤",
+            "message": f"需要外科手术 {skill.skill_level_req} 级才能治疗重伤",
             "cured": False,
         }
     
-    required_stamina = skill.stamina_cost * 3
-    if player.lingqi < required_stamina:
+    required_lingqi = skill.lingqi_cost * 3
+    if player.lingqi < required_lingqi:
         return {
             "success": False,
-            "message": f"治疗重伤需要 {required_stamina} 点体力，你只有 {player.lingqi} 点",
+            "message": f"治疗重伤需要 {required_lingqi} 点体力，你只有 {player.lingqi} 点",
             "cured": False,
         }
     
-    if random.random() > skill.success_rate:
-        player.lingqi -= required_stamina
-        return {
-            "success": True,
-            "message": f"治疗失败，消耗了 {required_stamina} 点体力，但伤势未愈",
-            "cured": False,
-            "healed": 0,
-        }
+    player.lingqi -= required_lingqi
     
-    player.lingqi -= required_stamina
-    player.is_injured = False
-    player.injured_until = 0.0
-    player.hp = int(player.max_hp * 0.5)
+    heal_amount = int(player.max_hp * 0.5)
+    player.hp = min(player.max_hp, player.hp + heal_amount)
+    
+    if hasattr(player, 'is_injured'):
+        player.is_injured = False
+    if hasattr(player, 'injured_until'):
+        player.injured_until = 0.0
     
     return {
         "success": True,
-        "message": f"治疗成功！重伤状态已解除，生命恢复至 {player.hp}/{player.max_hp}",
+        "message": f"手术成功！重伤已治愈，生命恢复至 {player.hp}/{player.max_hp}",
         "cured": True,
-        "hp_restored": player.hp,
-        "stamina_cost": required_stamina,
+        "hp_restored": heal_amount,
+        "lingqi_cost": required_lingqi,
     }
-
-
-def can_fight(player) -> tuple[bool, str]:
-    """
-    检查玩家是否可以战斗
-    
-    Returns:
-        (can_fight: bool, reason: str)
-    """
-    if player.is_injured:
-        return False, "你处于重伤状态，无法战斗，需要治疗才能恢复"
-    
-    if player.hp <= 0:
-        return False, "生命值为0，无法战斗"
-    
-    return True, ""
-
-
-def check_injury_expired(player) -> bool:
-    """检查 временные 重伤是否过期"""
-    if not player.is_injured:
-        return False
-    
-    if player.injured_until > 0 and time.time() >= player.injured_until:
-        player.is_injured = False
-        player.injured_until = 0.0
-        player.hp = int(player.max_hp * 0.3)
-        return True
-    
-    return False

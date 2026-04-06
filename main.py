@@ -1569,6 +1569,531 @@ class XiuxianPlugin(Star):
         yield event.plain_result(f"购买了 {potion_name}，花费 {price} 金币")
 
     # ══════════════════════════════════════════════════════════════
+    # 医疗系统命令
+    # ══════════════════════════════════════════════════════════════
+
+    @qikan_group.command("采集")
+    async def gather_cmd(self, event: AstrMessageEvent):
+        """采集草药"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.gather_herbs(player_id)
+        yield event.plain_result(result["message"])
+
+    @qikan_group.command("制作")
+    async def craft_cmd(self, event: AstrMessageEvent, recipe_name: str = ""):
+        """制作医疗物品"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not recipe_name.strip():
+            from .game.crafting import format_recipes_list
+            player = await self._engine.get_player(player_id)
+            if player:
+                yield event.plain_result(format_recipes_list(player))
+            else:
+                yield event.plain_result("角色不存在")
+            return
+        
+        recipe_map = {
+            "绷带": "make_bandage",
+            "高级绷带": "make_bandage_advanced",
+            "解毒剂": "make_antidote",
+            "草药": "make_healing_herb",
+        }
+        
+        recipe_id = recipe_map.get(recipe_name.strip())
+        if not recipe_id:
+            yield event.plain_result(f"未找到配方：{recipe_name}")
+            return
+        
+        result = await self._engine.craft_item(player_id, recipe_id)
+        yield event.plain_result(result["message"])
+
+    @qikan_group.command("使用草药")
+    async def use_herb_cmd(self, event: AstrMessageEvent):
+        """使用背包中的草药"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.use_medical_item(player_id, "herb_use")
+        yield event.plain_result(result["message"])
+
+    @qikan_group.command("使用绷带")
+    async def use_bandage_cmd(self, event: AstrMessageEvent):
+        """使用绷带"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.use_medical_item(player_id, "bandage")
+        yield event.plain_result(result["message"])
+
+    @qikan_group.command("使用高级绷带")
+    async def use_advanced_bandage_cmd(self, event: AstrMessageEvent):
+        """使用高级绷带"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.use_medical_item(player_id, "bandage_advanced")
+        yield event.plain_result(result["message"])
+
+    @qikan_group.command("医疗信息")
+    async def medical_info_cmd(self, event: AstrMessageEvent):
+        """查看医疗系统信息"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        info = self._engine.get_medical_info(player_id)
+        if not info.get("success"):
+            yield event.plain_result(info.get("message", "获取信息失败"))
+            return
+        
+        lines = ["🏥 医疗系统信息：", ""]
+        lines.append(f"  急救技能: {info['first_aid_level']} 级")
+        lines.append(f"  草药学: {info['herbalism_level']} 级")
+        lines.append(f"  外科手术: {info['surgery_level']} 级")
+        lines.append("")
+        
+        gather_info = info.get("gather_info", {})
+        lines.append(f"  采集: 消耗{gather_info.get('lingqi_cost', 10)}体力, 预计获得 {gather_info.get('estimated_herbs', '?')} 株")
+        
+        from .game.crafting import format_inventory_medical
+        player = await self._engine.get_player(player_id)
+        if player:
+            lines.append("")
+            lines.append(format_inventory_medical(player))
+        
+        yield event.plain_result("\n".join(lines))
+
+    # ══════════════════════════════════════════════════════════════
+    # 跑商系统命令
+    # ══════════════════════════════════════════════════════════════
+
+    @qikan_group.command("商品")
+    async def trade_list_cmd(self, event: AstrMessageEvent, buy_or_sell: str = "买"):
+        """查看当前城镇的商品列表"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            yield event.plain_result("无法获取位置信息")
+            return
+        
+        loc = player.map_state.current_location
+        if not loc:
+            yield event.plain_result("你不在任何城镇或村庄")
+            return
+        
+        is_buying = "买" in buy_or_sell or "卖" not in buy_or_sell
+        
+        from .game.trading import format_trade_list
+        result = format_trade_list(loc, player, is_buying)
+        yield event.plain_result(result)
+
+    @qikan_group.command("买")
+    async def trade_buy_cmd(self, event: AstrMessageEvent, goods_name: str = "", count: int = 1):
+        """买入商品: 买 商品名 [数量]"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not goods_name.strip():
+            yield event.plain_result(f"用法：{self._cmd('买 <商品> [数量]')}")
+            yield event.plain_result("例如：买 谷物 10")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            yield event.plain_result("无法获取位置信息")
+            return
+        
+        loc = player.map_state.current_location
+        if not loc:
+            yield event.plain_result("你不在任何城镇或村庄")
+            return
+        
+        # 查找商品ID
+        from .game.trading import GOODS
+        good_id = None
+        for gid, g in GOODS.items():
+            if goods_name.strip() in g.name:
+                good_id = gid
+                break
+        
+        if not good_id:
+            yield event.plain_result(f"未找到商品：{goods_name}")
+            return
+        
+        result = await self._engine.trade_buy(player_id, good_id, count, loc)
+        yield event.plain_result(result.get("message", "购买失败"))
+
+    @qikan_group.command("卖")
+    async def trade_sell_cmd(self, event: AstrMessageEvent, goods_name: str = "", count: int = 1):
+        """卖出商品: 卖 商品名 [数量]"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not goods_name.strip():
+            yield event.plain_result(f"用法：{self._cmd('卖 <商品> [数量]')}")
+            yield event.plain_result("例如：卖 谷物 10")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            yield event.plain_result("无法获取位置信息")
+            return
+        
+        loc = player.map_state.current_location
+        if not loc:
+            yield event.plain_result("你不在任何城镇或村庄")
+            return
+        
+        # 查找商品ID
+        from .game.trading import GOODS
+        good_id = None
+        for gid, g in GOODS.items():
+            if goods_name.strip() in g.name:
+                good_id = gid
+                break
+        
+        if not good_id:
+            yield event.plain_result(f"未找到商品：{goods_name}")
+            return
+        
+        result = await self._engine.trade_sell(player_id, good_id, count, loc)
+        yield event.plain_result(result.get("message", "出售失败"))
+
+    @qikan_group.command("背包商品")
+    async def trade_inventory_cmd(self, event: AstrMessageEvent):
+        """查看背包商品"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        info = self._engine.get_trade_inventory(player_id)
+        if not info.get("success"):
+            yield event.plain_result(info.get("message", "获取失败"))
+            return
+        
+        goods = info.get("goods", {})
+        if not goods:
+            yield event.plain_result("🎒 背包商品: (空)")
+            return
+        
+        lines = ["🎒 背包商品:"]
+        for good_id, item in goods.items():
+            lines.append(f"  {item['name']}: {item['count']}个")
+        
+        yield event.plain_result("\n".join(lines))
+
+    # ══════════════════════════════════════════════════════════════
+    # 锻造系统命令
+    # ══════════════════════════════════════════════════════════════
+
+    @qikan_group.command("锻造材料")
+    async def forging_materials_cmd(self, event: AstrMessageEvent):
+        """查看锻造材料"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        info = self._engine.get_forging_materials(player_id)
+        if not info.get("success"):
+            yield event.plain_result(info.get("message", "获取失败"))
+            return
+        
+        materials = info.get("materials", {})
+        if not materials:
+            yield event.plain_result("🔨 锻造材料: (空)")
+            return
+        
+        from .game.forging import format_materials_list
+        player = await self._engine.get_player(player_id)
+        if player:
+            yield event.plain_result(format_materials_list(player))
+        else:
+            lines = ["🔨 锻造材料:"]
+            for mat_id, item in materials.items():
+                lines.append(f"  {item['name']}: {item['count']}个")
+            yield event.plain_result("\n".join(lines))
+
+    @qikan_group.command("锻造配方")
+    async def forging_recipes_cmd(self, event: AstrMessageEvent):
+        """查看锻造配方"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        info = self._engine.get_forging_recipes(player_id)
+        if not info.get("success"):
+            yield event.plain_result(info.get("message", "获取失败"))
+            return
+        
+        recipes = info.get("recipes", [])
+        skill_level = info.get("skill_level", 0)
+        
+        if not recipes:
+            yield event.plain_result("⚒️ 锻造配方: (无)")
+            return
+        
+        lines = [f"⚒️ 锻造配方 (锻造等级: {skill_level}):", ""]
+        
+        weapons = [r for r in recipes if "sword" in r["result"]]
+        armors = [r for r in recipes if "armor" in r["result"]]
+        
+        if weapons:
+            lines.append("【武器】")
+            for r in weapons:
+                acc = f"+{r['accessory']}" if r['accessory'] else ""
+                lines.append(f"  {r['name']}: {r['fuel']}+{r['metal']}{acc}")
+        
+        if armors:
+            lines.append("【防具】")
+            for r in armors:
+                acc = f"+{r['accessory']}" if r['accessory'] else ""
+                lines.append(f"  {r['name']}: {r['fuel']}+{r['metal']}{acc}")
+        
+        yield event.plain_result("\n".join(lines))
+
+    @qikan_group.command("锻造")
+    async def forge_cmd(self, event: AstrMessageEvent, recipe_name: str = ""):
+        """锻造装备: 锻造 配方名"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not recipe_name.strip():
+            yield event.plain_result(f"用法：{self._cmd('锻造 <配方名>')}")
+            yield event.plain_result("例如：锻造 锻造铁剑")
+            return
+        
+        # 查找配方ID
+        from .game.forging import RECIPES
+        recipe_id = None
+        for rid, r in RECIPES.items():
+            if recipe_name.strip() in r.name:
+                recipe_id = rid
+                break
+        
+        if not recipe_id:
+            yield event.plain_result(f"未找到配方：{recipe_name}")
+            return
+        
+        result = await self._engine.forge_item(player_id, recipe_id)
+        yield event.plain_result(result.get("message", "锻造失败"))
+
+    @qikan_group.command("买材料")
+    async def buy_material_cmd(self, event: AstrMessageEvent, material_name: str = "", count: int = 1):
+        """购买锻造材料: 买材料 材料名 [数量]"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not material_name.strip():
+            yield event.plain_result(f"用法：{self._cmd('买材料 <材料名> [数量]')}")
+            yield event.plain_result("例如：买材料 木柴 10")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            yield event.plain_result("无法获取位置信息")
+            return
+        
+        loc = player.map_state.current_location
+        if not loc:
+            yield event.plain_result("你不在任何城镇")
+            return
+        
+        # 查找材料ID
+        from .game.forging import FORGING_MATERIALS, get_shop_materials
+        shop_mats = get_shop_materials(loc)
+        material_id = None
+        for m in shop_mats:
+            if material_name.strip() in m["name"]:
+                material_id = m["material_id"]
+                break
+        
+        if not material_id:
+            yield event.plain_result(f"该城镇不出售此材料：{material_name}")
+            return
+        
+        result = await self._engine.buy_forging_material(player_id, material_id, count)
+        yield event.plain_result(result.get("message", "购买失败"))
+
+    @qikan_group.command("锻造商店")
+    async def forging_shop_cmd(self, event: AstrMessageEvent):
+        """查看城镇锻造商店"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            yield event.plain_result("无法获取位置信息")
+            return
+        
+        loc = player.map_state.current_location
+        if not loc:
+            yield event.plain_result("你不在任何城镇")
+            return
+        
+        from .game.forging import get_shop_materials
+        shop_mats = get_shop_materials(loc)
+        
+        lines = ["🏪 锻造材料商店:", ""]
+        for m in shop_mats:
+            lines.append(f"  {m['name']}: {m['price']}第纳尔")
+        
+        yield event.plain_result("\n".join(lines))
+
+    # ══════════════════════════════════════════════════════════════
+    # 狩猎系统命令
+    # ══════════════════════════════════════════════════════════════
+
+    @qikan_group.command("狩猎")
+    async def hunt_cmd(self, event: AstrMessageEvent):
+        """外出狩猎"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.hunt_wildlife(player_id)
+        yield event.plain_result(result.get("message", "狩猎失败"))
+
+    @qikan_group.command("狩猎材料")
+    async def hunting_materials_cmd(self, event: AstrMessageEvent):
+        """查看狩猎获得的材料"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        info = self._engine.get_hunting_info(player_id)
+        if info.get("success"):
+            yield event.plain_result(info.get("materials", "无材料"))
+        else:
+            yield event.plain_result(info.get("message", "获取失败"))
+
+    @qikan_group.command("饰品配方")
+    async def accessory_recipes_cmd(self, event: AstrMessageEvent):
+        """查看饰品制作配方"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        info = self._engine.get_accessory_recipes(player_id)
+        if info.get("success"):
+            yield event.plain_result(info.get("recipes", "无配方"))
+        else:
+            yield event.plain_result(info.get("message", "获取失败"))
+
+    @qikan_group.command("制作饰品")
+    async def craft_accessory_cmd(self, event: AstrMessageEvent, accessory_name: str = ""):
+        """制作饰品: 制作饰品 饰品名"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not accessory_name.strip():
+            yield event.plain_result(f"用法：{self._cmd('制作饰品 <饰品名>')}")
+            yield event.plain_result("例如：制作饰品 狼牙项链")
+            return
+        
+        # 查找饰品ID
+        from .game.accessories import ACCESSORIES
+        accessory_id = None
+        for aid, acc in ACCESSORIES.items():
+            if accessory_name.strip() in acc.name:
+                accessory_id = aid
+                break
+        
+        if not accessory_id:
+            yield event.plain_result(f"未找到饰品：{accessory_name}")
+            return
+        
+        result = await self._engine.craft_accessory(player_id, accessory_id)
+        yield event.plain_result(result.get("message", "制作失败"))
+
+    @qikan_group.command("猎人商店")
+    async def hunter_shop_cmd(self, event: AstrMessageEvent):
+        """查看猎人商店"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        player = await self._engine.get_player(player_id)
+        if not player:
+            yield event.plain_result("角色不存在")
+            return
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            yield event.plain_result("无法获取位置信息")
+            return
+        
+        loc = player.map_state.current_location
+        if not loc:
+            yield event.plain_result("你不在任何城镇")
+            return
+        
+        from .game.hunting import get_hunter_shop_materials
+        shop_mats = get_hunter_shop_materials(loc)
+        
+        lines = ["🏪 猎人商店:", ""]
+        for m in shop_mats:
+            lines.append(f"  {m['name']}: {m['price']}第纳尔")
+        
+        yield event.plain_result("\n".join(lines))
+
+    # ══════════════════════════════════════════════════════════════
     # 管理员命令
     # ══════════════════════════════════════════════════════════════
 

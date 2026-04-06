@@ -36,6 +36,16 @@ class Player:
     defense: int = 5
     spirit_stones: int = 0
     lingqi: int = 50          # 体力
+    
+    # 骑砍属性系统
+    strength: int = 5         # 力量
+    agility: int = 5          # 敏捷
+    intelligence: int = 5      # 智力
+    skill_points: int = 0     # 可分配技能点
+    attribute_points: int = 0  # 可分配属性点
+    
+    # 技能等级 {skill_id: level}
+    skills: dict = field(default_factory=dict)
     permanent_max_hp_bonus: int = 0    # 药剂提供的永久生命上限加成
     permanent_attack_bonus: int = 0    # 药剂提供的永久攻击加成
     permanent_defense_bonus: int = 0   # 药剂提供的永久防御加成
@@ -96,36 +106,63 @@ class Player:
     # 劫匪战斗统计
     bandit_stats: dict = field(default_factory=dict)  # {total_defeated, total_exp, total_gold, ...}
     
+    # 出生系统
+    spawn_origin: str = ""                       # 出生起源
+    spawn_location: str = ""                     # 出生地点
+    avatar_url: str = ""                         # 玩家头像URL
+    last_rest_time: float = 0                    # 上次休息时间
+    
     # 重伤状态
     is_injured: bool = False                     # 是否处于重伤状态
     injured_until: float = 0.0                   # 重伤结束时间戳（0表示永久）
+
+    # 村庄产业系统
+    village_industries: dict = field(default_factory=dict)  # {village_id: {industries: {id: {...}}, total_count: N}}
+    village_favor: dict = field(default_factory=dict)       # {village_id: favor_value}
 
     def to_dict(self, include_sensitive: bool = False) -> dict:
         """序列化为字典。include_sensitive=True 时包含密码哈希（仅用于存储）。"""
         realm_cfg = REALM_CONFIG.get(self.realm, {})
 
-        # 装备加成计算
+        # 装备加成计算（包含前缀加成）
+        from .constants import get_prefix_bonus, ITEM_PREFIXES
         equip_slots = ["weapon", "head", "body", "hands", "legs", "shoulders", "accessory1", "accessory2"]
         equip_bonus = {"attack": 0, "defense": 0, "hp": 0}
+        prefix_bonus = {"attack": 0, "defense": 0, "hp": 0}
         equipped_items = {}
         
         for slot in equip_slots:
             item_id = getattr(self, slot, "无")
             eq = EQUIPMENT_REGISTRY.get(item_id)
             if eq:
+                prefix_id = getattr(self, f"{item_id}_prefix", None) or "none"
+                prefix_def = ITEM_PREFIXES.get(prefix_id, ITEM_PREFIXES["none"])
+                prefix_bonus["attack"] += prefix_def.attack_bonus
+                prefix_bonus["defense"] += prefix_def.defense_bonus
+                prefix_bonus["hp"] += prefix_def.hp_bonus
+                
                 equip_bonus["attack"] += eq.attack
                 equip_bonus["defense"] += eq.defense
                 equip_bonus["hp"] += eq.hp
                 equipped_items[slot] = {
                     "equip_id": eq.equip_id,
                     "name": eq.name,
+                    "prefix": prefix_id,
+                    "prefix_name": prefix_def.name,
+                    "prefix_quality": prefix_def.quality,
                     "tier": eq.tier,
                     "tier_name": EQUIPMENT_TIER_NAMES.get(eq.tier, "未知"),
                     "slot": eq.slot,
                     "slot_name": EQUIPMENT_SLOT_NAMES.get(eq.slot, "未知"),
-                    "attack": eq.attack,
-                    "defense": eq.defense,
-                    "hp": eq.hp,
+                    "attack": eq.attack + prefix_def.attack_bonus,
+                    "defense": eq.defense + prefix_def.defense_bonus,
+                    "hp": eq.hp + prefix_def.hp_bonus,
+                    "base_attack": eq.attack,
+                    "base_defense": eq.defense,
+                    "base_hp": eq.hp,
+                    "prefix_attack_bonus": prefix_def.attack_bonus,
+                    "prefix_defense_bonus": prefix_def.defense_bonus,
+                    "prefix_hp_bonus": prefix_def.hp_bonus,
                     "special_effect": eq.special_effect,
                     "description": eq.description,
                 }
@@ -277,13 +314,15 @@ class Player:
             "max_hp": self.max_hp,
             "attack": self.attack,
             "defense": self.defense,
-            "total_attack": max(0, self.attack + equip_bonus["attack"] + hm_bonus["attack_bonus"] + gongfa_total["attack_bonus"] + buff_totals["attack_boost"] - buff_totals["attack_reduction"]),
-            "total_defense": max(0, self.defense + equip_bonus["defense"] + hm_bonus["defense_bonus"] + gongfa_total["defense_bonus"] + buff_totals["defense_boost"] - buff_totals["defense_reduction"]),
-            "total_max_hp": self.max_hp + equip_bonus["hp"] + self.permanent_max_hp_bonus,
+            "total_attack": max(0, self.attack + equip_bonus["attack"] + prefix_bonus["attack"] + hm_bonus["attack_bonus"] + gongfa_total["attack_bonus"] + buff_totals["attack_boost"] - buff_totals["attack_reduction"]),
+            "total_defense": max(0, self.defense + equip_bonus["defense"] + prefix_bonus["defense"] + hm_bonus["defense_bonus"] + gongfa_total["defense_bonus"] + buff_totals["defense_boost"] - buff_totals["defense_reduction"]),
+            "total_max_hp": self.max_hp + equip_bonus["hp"] + prefix_bonus["hp"] + self.permanent_max_hp_bonus,
             "buff_totals": buff_totals,
             "active_buffs": get_active_buffs_display(self),
             "equip_bonus": equip_bonus,
+            "prefix_bonus": prefix_bonus,
             "equipped_items": equipped_items,
+            "equipment": equipped_items,
             "gongfa_bonus": gongfa_total,
             "mount_bonus": get_mount_bonus(self),
             "mounted": self.mount != "无",
@@ -342,9 +381,21 @@ class Player:
             "active_quests": list(self.active_quests),
             "level": self.level,
             "unallocated_points": self.unallocated_points,
+            # 骑砍属性系统
+            "strength": self.strength,
+            "agility": self.agility,
+            "intelligence": self.intelligence,
+            "skill_points": self.skill_points,
+            "skills": dict(self.skills),
             "bandit_stats": dict(self.bandit_stats),
+            "spawn_origin": self.spawn_origin,
+            "spawn_location": self.spawn_location,
+            "avatar_url": self.avatar_url,
+            "last_rest_time": self.last_rest_time,
             "is_injured": self.is_injured,
             "injured_until": self.injured_until,
+            "village_industries": dict(self.village_industries),
+            "village_favor": dict(self.village_favor),
         }
         if include_sensitive:
             d["password_hash"] = self.password_hash
@@ -431,7 +482,19 @@ class Player:
             active_quests=data.get("active_quests", []),
             level=data.get("level", 1),
             unallocated_points=data.get("unallocated_points", 0),
+            # 骑砍属性系统
+            strength=data.get("strength", 5),
+            agility=data.get("agility", 5),
+            intelligence=data.get("intelligence", 5),
+            skill_points=data.get("skill_points", 0),
+            skills=data.get("skills", {}),
             bandit_stats=data.get("bandit_stats", {}),
+            spawn_origin=data.get("spawn_origin", ""),
+            spawn_location=data.get("spawn_location", ""),
+            avatar_url=data.get("avatar_url", ""),
+            last_rest_time=data.get("last_rest_time", 0),
             is_injured=data.get("is_injured", False),
             injured_until=data.get("injured_until", 0.0),
+            village_industries=data.get("village_industries", {}),
+            village_favor=data.get("village_favor", {}),
         )

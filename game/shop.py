@@ -23,6 +23,11 @@ from .constants import (
     get_daily_recycle_price,
     get_heart_method_manual_id,
     get_gongfa_scroll_id,
+    ITEM_PREFIXES,
+    PREFIX_COST,
+    get_prefix_bonus,
+    get_random_prefix,
+    PREFIX_QUALITY_ORDER,
 )
 from .inventory import add_item
 
@@ -343,4 +348,170 @@ async def buy_from_shop(
             "purchased_at": today,
             "daily_limit": daily_limit,
         },
+    }
+
+
+# ── 铁匠铺功能 ─────────────────────────────────────────────────
+
+def _calc_equipment_value(item_id: str) -> int:
+    """计算装备价值（基于基础属性和品质）"""
+    eq = EQUIPMENT_REGISTRY.get(item_id)
+    if not eq:
+        return 100
+    
+    base_value = (eq.attack + eq.defense + eq.hp // 10) * 10
+    
+    tier_multiplier = {0: 1.0, 1: 1.5, 2: 2.5, 3: 5.0}
+    tier_mult = tier_multiplier.get(eq.tier, 1.0)
+    
+    return max(10, int(base_value * tier_mult))
+
+
+async def blacksmith_repair_prefix(player: "Player", item_id: str) -> dict:
+    """铁匠铺：修复装备前缀（移除坏前缀）- 按装备价值百分比收费"""
+    if item_id not in player.inventory:
+        return {"success": False, "message": "背包中没有此物品"}
+    
+    if not item_id.startswith("equipment_"):
+        return {"success": False, "message": "只能修复装备的前缀"}
+    
+    current_prefix = getattr(player, f"{item_id}_prefix", None) or "none"
+    prefix_def = ITEM_PREFIXES.get(current_prefix, ITEM_PREFIXES["none"])
+    
+    if prefix_def.quality not in ("terrible", "poor"):
+        return {"success": False, "message": f"此装备前缀无需修复（当前：{prefix_def.name}）"}
+    
+    equip_value = _calc_equipment_value(item_id)
+    
+    if prefix_def.quality == "terrible":
+        cost = int(equip_value * 0.4)
+    else:
+        cost = int(equip_value * 0.25)
+    
+    cost = max(1, cost)
+    
+    if player.spirit_stones < cost:
+        return {"success": False, "message": f"第纳尔不足，需要{cost}第纳尔（装备价值：{equip_value}）"}
+    
+    player.spirit_stones -= cost
+    
+    setattr(player, f"{item_id}_prefix", "none")
+    
+    equip_def = EQUIPMENT_REGISTRY.get(item_id)
+    equip_name = equip_def.name if equip_def else item_id
+    
+    return {
+        "success": True,
+        "message": f"成功修复【{equip_name}】的前缀，消耗{cost}第纳尔（装备价值：{equip_value}）",
+        "cost": cost,
+        "equip_value": equip_value,
+    }
+
+
+async def blacksmith_enhance_prefix(player: "Player", item_id: str, target_quality: str = "good") -> dict:
+    """铁匠铺：为无前缀或普通前缀的装备添加好前缀 - 固定比例收费"""
+    if item_id not in player.inventory:
+        return {"success": False, "message": "背包中没有此物品"}
+    
+    if not item_id.startswith("equipment_"):
+        return {"success": False, "message": "只能强化装备的前缀"}
+    
+    current_prefix = getattr(player, f"{item_id}_prefix", None) or "none"
+    prefix_def = ITEM_PREFIXES.get(current_prefix, ITEM_PREFIXES["none"])
+    
+    if prefix_def.quality in ("excellent", "good"):
+        return {"success": False, "message": "此装备已有优质前缀，无需强化"}
+    
+    if prefix_def.quality in ("terrible", "poor"):
+        return {"success": False, "message": "此装备前缀损坏严重，请先修复后再强化"}
+    
+    equip_value = _calc_equipment_value(item_id)
+    enhance_rate = 0.20
+    cost = int(equip_value * enhance_rate)
+    cost = max(1, cost)
+    
+    if player.spirit_stones < cost:
+        return {"success": False, "message": f"第纳尔不足，需要{cost}第纳尔（装备价值：{equip_value}）"}
+    
+    player.spirit_stones -= cost
+    
+    new_prefix = get_random_prefix()
+    while ITEM_PREFIXES.get(new_prefix, ITEM_PREFIXES["none"]).quality not in ("good", "excellent", "normal"):
+        new_prefix = get_random_prefix()
+    
+    setattr(player, f"{item_id}_prefix", new_prefix)
+    
+    new_prefix_def = ITEM_PREFIXES[new_prefix]
+    equip_def = EQUIPMENT_REGISTRY.get(item_id)
+    equip_name = equip_def.name if equip_def else item_id
+    
+    return {
+        "success": True,
+        "message": f"成功为【{equip_name}】添加前缀【{new_prefix_def.name}】！消耗{cost}第纳尔（装备价值：{equip_value}）",
+        "new_prefix": new_prefix,
+        "new_prefix_name": new_prefix_def.name,
+        "cost": cost,
+    }
+
+
+async def get_item_prefix_info(player: "Player", item_id: str) -> dict:
+    """获取装备前缀信息"""
+    if item_id not in player.inventory:
+        return {"success": False, "message": "背包中没有此物品"}
+    
+    if not item_id.startswith("equipment_"):
+        return {"success": False, "message": "这不是装备"}
+    
+    current_prefix = getattr(player, f"{item_id}_prefix", None) or "none"
+    prefix_def = ITEM_PREFIXES.get(current_prefix, ITEM_PREFIXES["none"])
+    
+    equip_def = EQUIPMENT_REGISTRY.get(item_id)
+    if not equip_def:
+        return {"success": False, "message": "装备不存在"}
+    
+    base_attack = getattr(equip_def, "attack", 0)
+    base_defense = getattr(equip_def, "defense", 0)
+    base_hp = getattr(equip_def, "hp", 0)
+    
+    total_attack = base_attack + prefix_def.attack_bonus
+    total_defense = base_defense + prefix_def.defense_bonus
+    total_hp = base_hp + prefix_def.hp_bonus
+    
+    equip_value = _calc_equipment_value(item_id)
+    
+    if prefix_def.quality == "terrible":
+        repair_cost = int(equip_value * 0.4)
+    elif prefix_def.quality == "poor":
+        repair_cost = int(equip_value * 0.25)
+    else:
+        repair_cost = 0
+    
+    enhance_cost = int(equip_value * 0.20)
+    
+    can_enhance = prefix_def.quality in ("none", "normal")
+    
+    return {
+        "success": True,
+        "item_id": item_id,
+        "item_name": equip_def.name,
+        "equip_value": equip_value,
+        "prefix": current_prefix,
+        "prefix_name": prefix_def.name,
+        "prefix_quality": prefix_def.quality,
+        "prefix_description": prefix_def.description,
+        "bonuses": {
+            "attack": prefix_def.attack_bonus,
+            "defense": prefix_def.defense_bonus,
+            "hp": prefix_def.hp_bonus,
+            "crit_chance": prefix_def.crit_chance,
+        },
+        "total_stats": {
+            "attack": total_attack,
+            "defense": total_defense,
+            "hp": total_hp,
+        },
+        "can_repair": prefix_def.quality in ("terrible", "poor"),
+        "repair_cost": repair_cost,
+        "can_enhance": can_enhance,
+        "enhance_cost": enhance_cost,
     }

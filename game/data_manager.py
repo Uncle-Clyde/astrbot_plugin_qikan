@@ -288,6 +288,20 @@ class DataManager:
                 updated_at TEXT NOT NULL
             )
         """)
+        # 关于页面表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS about_page (
+                id         INTEGER PRIMARY KEY CHECK (id = 1),
+                acknowledgements TEXT DEFAULT '',
+                rules      TEXT DEFAULT '',
+                updated_at TEXT NOT NULL
+            )
+        """)
+        # 初始化关于页面（如果不存在）
+        await self.db.execute("""
+            INSERT OR IGNORE INTO about_page (id, acknowledgements, rules, updated_at)
+            VALUES (1, '', '', datetime('now'))
+        """)
         # 战技定义独立表
         await self.db.execute("""
             CREATE TABLE IF NOT EXISTS gongfas (
@@ -402,17 +416,237 @@ class DataManager:
             CREATE INDEX IF NOT EXISTS idx_sect_contrib_config_sect
             ON sect_contribution_config (sect_id)
         """)
+        # 家族任务表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS sect_tasks (
+                task_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                sect_id         TEXT NOT NULL,
+                creator_id      TEXT NOT NULL,
+                title           TEXT NOT NULL,
+                description     TEXT DEFAULT '',
+                task_type       TEXT NOT NULL,
+                target_count    INTEGER DEFAULT 1,
+                current_count   INTEGER DEFAULT 0,
+                reward_points  INTEGER DEFAULT 0,
+                reward_item_id  TEXT DEFAULT '',
+                reward_item_count INTEGER DEFAULT 0,
+                status          TEXT DEFAULT 'active',
+                created_at      REAL NOT NULL,
+                expires_at      REAL DEFAULT 0,
+                FOREIGN KEY (sect_id) REFERENCES sects(sect_id)
+            )
+        """)
+        await self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sect_tasks_sect
+            ON sect_tasks (sect_id, status)
+        """)
+        # 家族任务接受记录表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS sect_task_members (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id         INTEGER NOT NULL,
+                user_id         TEXT NOT NULL,
+                progress        INTEGER DEFAULT 0,
+                status          TEXT DEFAULT 'accepted',
+                accepted_at     REAL NOT NULL,
+                completed_at    REAL DEFAULT 0,
+                FOREIGN KEY (task_id) REFERENCES sect_tasks(task_id),
+                UNIQUE(task_id, user_id)
+            )
+        """)
+        await self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sect_task_members_task
+            ON sect_task_members (task_id)
+        """)
+        # 音效配置表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS audio_config (
+                id              INTEGER PRIMARY KEY CHECK (id = 1),
+                enabled         INTEGER DEFAULT 0,
+                music_enabled   INTEGER DEFAULT 0,
+                sound_volume    REAL DEFAULT 0.7,
+                music_volume    REAL DEFAULT 0.5,
+                sound_coins    TEXT DEFAULT '',
+                sound_button   TEXT DEFAULT '',
+                sound_task     TEXT DEFAULT '',
+                sound_equip    TEXT DEFAULT '',
+                sound_attack   TEXT DEFAULT '',
+                music_bgm      TEXT DEFAULT '',
+                updated_at     TEXT NOT NULL
+            )
+        """)
+        await self.db.execute("""
+            INSERT OR IGNORE INTO audio_config (id, enabled, music_enabled, sound_coins, sound_button, updated_at)
+            VALUES (1, 0, 0, '/static/audio/coins.wav', '/static/audio/button.wav', datetime('now'))
+        """)
+        
+        # 邮件表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS mails (
+                mail_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sender_id TEXT DEFAULT 'system',
+                sender_name TEXT DEFAULT '系统',
+                receiver_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                content TEXT,
+                attachments TEXT DEFAULT '{}',
+                is_read INTEGER DEFAULT 0,
+                created_at REAL NOT NULL,
+                expires_at REAL,
+                is_deleted_receiver INTEGER DEFAULT 0
+            )
+        """)
+        
+        # 成就定义表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS achievements (
+                achievement_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                icon TEXT DEFAULT '🏆',
+                condition_type TEXT NOT NULL,
+                condition_value INTEGER,
+                reward_stones INTEGER DEFAULT 0,
+                reward_items TEXT DEFAULT '{}',
+                reward_title TEXT,
+                sort_order INTEGER DEFAULT 0
+            )
+        """)
+        
+        # 玩家成就进度表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS player_achievements (
+                user_id TEXT NOT NULL,
+                achievement_id TEXT NOT NULL,
+                progress INTEGER DEFAULT 0,
+                completed INTEGER DEFAULT 0,
+                completed_at REAL,
+                claimed INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, achievement_id)
+            )
+        """)
+        
+        # 称号定义表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS titles (
+                title_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                icon TEXT DEFAULT '📜',
+                color TEXT DEFAULT '#FFD700',
+                prefix TEXT,
+                bonus_attack INTEGER DEFAULT 0,
+                bonus_defense INTEGER DEFAULT 0,
+                bonus_hp INTEGER DEFAULT 0,
+                is_system INTEGER DEFAULT 0,
+                created_at REAL
+            )
+        """)
+        
+        # 玩家称号表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS player_titles (
+                user_id TEXT NOT NULL,
+                title_id TEXT NOT NULL,
+                is_active INTEGER DEFAULT 0,
+                acquired_at REAL NOT NULL,
+                PRIMARY KEY (user_id, title_id)
+            )
+        """)
+        
+        # 装备强化配置表
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS enhance_configs (
+                equipment_type TEXT NOT NULL,
+                level INTEGER NOT NULL,
+                success_rate REAL DEFAULT 0.8,
+                cost_stones INTEGER,
+                cost_item_id TEXT,
+                cost_item_count INTEGER DEFAULT 1,
+                bonus_attack INTEGER DEFAULT 0,
+                bonus_defense INTEGER DEFAULT 0,
+                bonus_hp INTEGER DEFAULT 0,
+                PRIMARY KEY (equipment_type, level)
+            )
+        """)
+        
+        # 玩家装备强化记录
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS player_enhance_log (
+                log_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                equipment_type TEXT NOT NULL,
+                equipment_name TEXT,
+                from_level INTEGER,
+                to_level INTEGER,
+                success INTEGER NOT NULL,
+                cost_stones INTEGER,
+                created_at REAL NOT NULL
+            )
+        """)
+        
+        # ══════════════════════════════════════════════════════════════
+        # 同伴系统表
+        # ══════════════════════════════════════════════════════════════
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS player_companions (
+                user_id TEXT NOT NULL,
+                companion_id TEXT NOT NULL,
+                loyalty INTEGER DEFAULT 50,
+                gifts_given INTEGER DEFAULT 0,
+                last_gift_time REAL DEFAULT 0,
+                is_active INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, companion_id)
+            )
+        """)
+        
+        # ══════════════════════════════════════════════════════════════
+        # 部队系统表
+        # ══════════════════════════════════════════════════════════════
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS player_troops (
+                user_id TEXT NOT NULL,
+                troop_id TEXT NOT NULL,
+                count INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, troop_id)
+            )
+        """)
+        
+        # ══════════════════════════════════════════════════════════════
+        # 竞技场系统表
+        # ══════════════════════════════════════════════════════════════
+        await self.db.execute("""
+            CREATE TABLE IF NOT EXISTS tournament_records (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                opponent_id TEXT NOT NULL,
+                result TEXT NOT NULL,
+                reward_gold INTEGER DEFAULT 0,
+                reward_dao_yun INTEGER DEFAULT 0,
+                win_streak INTEGER DEFAULT 0,
+                streak_bonus TEXT DEFAULT '{}',
+                created_at REAL NOT NULL
+            )
+        """)
+        await self.db.execute("""
+            CREATE INDEX IF NOT EXISTS idx_tournament_user
+            ON tournament_records (user_id, created_at)
+        """)
+        
         await self.db.commit()
         # 数据库升级：为旧表添加新列
         await self._alter_add_column("players", "last_adventure_time", "REAL DEFAULT 0.0")
         await self._alter_add_column("players", "death_count", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "lingqi", "INTEGER DEFAULT 50")
+        await self._alter_add_column("players", "gold", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "permanent_max_hp_bonus", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "permanent_attack_bonus", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "permanent_defense_bonus", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "permanent_lingqi_bonus", "INTEGER DEFAULT 0")
         await self._alter_add_column("players", "heart_method", "TEXT DEFAULT '无'")
         await self._alter_add_column("players", "weapon", "TEXT DEFAULT '无'")
+        await self._alter_add_column("players", "avatar_url", "TEXT DEFAULT ''")
+        await self._alter_add_column("players", "last_rest_time", "REAL DEFAULT 0")
         await self._alter_add_column("players", "gongfa_1", "TEXT DEFAULT '无'")
         await self._alter_add_column("players", "gongfa_2", "TEXT DEFAULT '无'")
         await self._alter_add_column("players", "gongfa_3", "TEXT DEFAULT '无'")
@@ -611,6 +845,89 @@ class DataManager:
         if self.db:
             await self.db.close()
             self.db = None
+
+    # ==================== 数据库维护 ====================
+
+    async def db_health_check(self) -> dict:
+        """数据库健康检查，返回诊断信息。"""
+        if not self.db:
+            return {"healthy": False, "message": "数据库未初始化"}
+
+        try:
+            result = {"healthy": True, "checks": {}}
+
+            async with self.db.execute("PRAGMA integrity_check") as cur:
+                row = await cur.fetchone()
+                result["checks"]["integrity"] = row[0] if row else "unknown"
+
+            async with self.db.execute("PRAGMA quick_check") as cur:
+                row = await cur.fetchone()
+                result["checks"]["quick_check"] = row[0] if row else "unknown"
+
+            async with self.db.execute("PRAGMA journal_mode") as cur:
+                row = await cur.fetchone()
+                result["checks"]["journal_mode"] = row[0] if row else "unknown"
+
+            async with self.db.execute("PRAGMA synchronous") as cur:
+                row = await cur.fetchone()
+                result["checks"]["synchronous"] = row[0] if row else "unknown"
+
+            async with self.db.execute("SELECT COUNT(*) FROM players") as cur:
+                row = await cur.fetchone()
+                result["player_count"] = row[0] if row else 0
+
+            async with self.db.execute("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()") as cur:
+                row = await cur.fetchone()
+                result["db_size_bytes"] = row[0] if row else 0
+
+            return result
+        except Exception as e:
+            return {"healthy": False, "message": str(e)}
+
+    async def db_vacuum(self) -> dict:
+        """执行 VACUUM 优化数据库。"""
+        if not self.db:
+            return {"success": False, "message": "数据库未初始化"}
+
+        try:
+            await self.db.execute("VACUUM")
+            return {"success": True, "message": "数据库优化完成"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    async def db_backup(self, backup_path: str) -> dict:
+        """备份数据库到指定路径。"""
+        import shutil
+
+        if not self.db:
+            return {"success": False, "message": "数据库未初始化"}
+
+        try:
+            await self.db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            shutil.copy2(self._db_path, backup_path)
+            wal_path = self._db_path + "-wal"
+            if os.path.exists(wal_path):
+                shutil.copy2(wal_path, backup_path + "-wal")
+            return {"success": True, "message": f"备份成功: {backup_path}"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    async def get_table_info(self) -> list[dict]:
+        """获取所有表的信息。"""
+        if not self.db:
+            return []
+
+        tables = []
+        async with self.db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ) as cur:
+            async for row in cur:
+                table_name = row[0]
+                async with self.db.execute(f"SELECT COUNT(*) FROM {table_name}") as count_cur:
+                    count_row = await count_cur.fetchone()
+                    count = count_row[0] if count_row else 0
+                tables.append({"name": table_name, "row_count": count})
+        return tables
 
     # ==================== 内部方法 ====================
 
@@ -2122,6 +2439,116 @@ class DataManager:
         await self.db.commit()
         return (cur.rowcount or 0) > 0
 
+    # ── 关于页面 ──────────────────────────────────────────────
+
+    async def get_about_page(self) -> dict:
+        """获取关于页面内容"""
+        cur = await self.db.execute(
+            "SELECT acknowledgements, rules, updated_at FROM about_page WHERE id = 1"
+        )
+        row = await cur.fetchone()
+        if row:
+            return {
+                "acknowledgements": row[0] or "",
+                "rules": row[1] or "",
+                "updated_at": row[2] or "",
+            }
+        return {"acknowledgements": "", "rules": "", "updated_at": ""}
+
+    async def admin_update_about_page(self, acknowledgements: str, rules: str) -> bool:
+        """更新关于页面内容"""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur = await self.db.execute(
+            "UPDATE about_page SET acknowledgements = ?, rules = ?, updated_at = ? WHERE id = 1",
+            (acknowledgements, rules, now),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    # ── 音效配置 ──────────────────────────────────────────────
+
+    async def get_audio_config(self) -> dict:
+        """获取音效配置"""
+        cur = await self.db.execute(
+            """SELECT enabled, music_enabled, sound_volume, music_volume,
+               sound_coins, sound_button, sound_task, sound_equip, sound_attack, music_bgm
+               FROM audio_config WHERE id = 1"""
+        )
+        row = await cur.fetchone()
+        if row:
+            return {
+                "enabled": bool(row[0]),
+                "music_enabled": bool(row[1]),
+                "sound_volume": row[2] or 0.7,
+                "music_volume": row[3] or 0.5,
+                "sound_coins": row[4] or "",
+                "sound_button": row[5] or "",
+                "sound_task": row[6] or "",
+                "sound_equip": row[7] or "",
+                "sound_attack": row[8] or "",
+                "music_bgm": row[9] or "",
+            }
+        return {
+            "enabled": False,
+            "music_enabled": False,
+            "sound_volume": 0.7,
+            "music_volume": 0.5,
+            "sound_coins": "",
+            "sound_button": "",
+            "sound_task": "",
+            "sound_equip": "",
+            "sound_attack": "",
+            "music_bgm": "",
+        }
+
+    async def update_audio_config(
+        self,
+        enabled: bool = None,
+        music_enabled: bool = None,
+        sound_volume: float = None,
+        music_volume: float = None,
+    ) -> dict:
+        """更新玩家音效设置"""
+        updates = []
+        params = []
+        if enabled is not None:
+            updates.append("enabled = ?")
+            params.append(1 if enabled else 0)
+        if music_enabled is not None:
+            updates.append("music_enabled = ?")
+            params.append(1 if music_enabled else 0)
+        if sound_volume is not None:
+            updates.append("sound_volume = ?")
+            params.append(sound_volume)
+        if music_volume is not None:
+            updates.append("music_volume = ?")
+            params.append(music_volume)
+        
+        if not updates:
+            return {"success": False, "message": "没有要更新的设置"}
+        
+        params.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        cur = await self.db.execute(
+            f"UPDATE audio_config SET {', '.join(updates)}, updated_at = ? WHERE id = 1",
+            params,
+        )
+        await self.db.commit()
+        return {"success": True, "message": "设置已保存"}
+
+    async def admin_update_audio_files(self, audio_type: str, file_path: str) -> dict:
+        """管理员更新音效文件配置"""
+        valid_types = ["sound_coins", "sound_button", "sound_task", "sound_equip", "sound_attack", "music_bgm"]
+        if audio_type not in valid_types:
+            return {"success": False, "message": "无效的音效类型"}
+        
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        cur = await self.db.execute(
+            f"UPDATE audio_config SET {audio_type} = ?, updated_at = ? WHERE id = 1",
+            (file_path, now),
+        )
+        await self.db.commit()
+        return {"success": True, "message": f"音效文件已更新: {audio_type}"}
+
     # ── 世界频道消息 ──────────────────────────────────────────
 
     async def save_chat_message(
@@ -2694,3 +3121,713 @@ class DataManager:
         )
         await self.db.commit()
         return await self.get_member_contribution(user_id)
+
+    # ── 家族任务 ────────────────────────────────────────────
+
+    async def create_sect_task(
+        self,
+        sect_id: str,
+        creator_id: str,
+        title: str,
+        description: str,
+        task_type: str,
+        target_count: int,
+        reward_points: int,
+        reward_item_id: str = "",
+        reward_item_count: int = 0,
+        expires_hours: int = 24,
+    ) -> int:
+        """创建家族任务。"""
+        await self._ensure_sect_schema()
+        now = time.time()
+        expires_at = now + expires_hours * 3600 if expires_hours > 0 else 0
+        cur = await self.db.execute(
+            """INSERT INTO sect_tasks 
+               (sect_id, creator_id, title, description, task_type, target_count, 
+                reward_points, reward_item_id, reward_item_count, status, created_at, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
+            (sect_id, creator_id, title, description, task_type, target_count,
+             reward_points, reward_item_id, reward_item_count, now, expires_at),
+        )
+        await self.db.commit()
+        return cur.lastrowid or 0
+
+    async def get_sect_tasks(self, sect_id: str, status: str = "") -> list[dict]:
+        """获取家族任务列表。"""
+        await self._ensure_sect_schema()
+        now = time.time()
+        if status:
+            cur = await self.db.execute(
+                "SELECT task_id, sect_id, creator_id, title, description, task_type, target_count, "
+                "current_count, reward_points, reward_item_id, reward_item_count, status, created_at, expires_at "
+                "FROM sect_tasks WHERE sect_id = ? AND status = ? ORDER BY created_at DESC",
+                (sect_id, status),
+            )
+        else:
+            cur = await self.db.execute(
+                "SELECT task_id, sect_id, creator_id, title, description, task_type, target_count, "
+                "current_count, reward_points, reward_item_id, reward_item_count, status, created_at, expires_at "
+                "FROM sect_tasks WHERE sect_id = ? AND (status = 'active' OR expires_at = 0 OR expires_at > ?) ORDER BY created_at DESC",
+                (sect_id, now),
+            )
+        rows = await cur.fetchall()
+        return [{
+            "task_id": r[0],
+            "sect_id": r[1],
+            "creator_id": r[2],
+            "title": r[3],
+            "description": r[4],
+            "task_type": r[5],
+            "target_count": r[6],
+            "current_count": r[7],
+            "reward_points": r[8],
+            "reward_item_id": r[9],
+            "reward_item_count": r[10],
+            "status": r[11],
+            "created_at": r[12],
+            "expires_at": r[13],
+            "is_expired": r[13] > 0 and r[13] < now,
+        } for r in rows]
+
+    async def get_task_by_id(self, task_id: int) -> dict | None:
+        """获取任务详情。"""
+        await self._ensure_sect_schema()
+        cur = await self.db.execute(
+            "SELECT task_id, sect_id, creator_id, title, description, task_type, target_count, "
+            "current_count, reward_points, reward_item_id, reward_item_count, status, created_at, expires_at "
+            "FROM sect_tasks WHERE task_id = ?",
+            (task_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        now = time.time()
+        return {
+            "task_id": row[0],
+            "sect_id": row[1],
+            "creator_id": row[2],
+            "title": row[3],
+            "description": row[4],
+            "task_type": row[5],
+            "target_count": row[6],
+            "current_count": row[7],
+            "reward_points": row[8],
+            "reward_item_id": row[9],
+            "reward_item_count": row[10],
+            "status": row[11],
+            "created_at": row[12],
+            "expires_at": row[13],
+            "is_expired": row[13] > 0 and row[13] < now,
+        }
+
+    async def update_task_status(self, task_id: int, status: str) -> bool:
+        """更新任务状态。"""
+        await self._ensure_sect_schema()
+        cur = await self.db.execute(
+            "UPDATE sect_tasks SET status = ? WHERE task_id = ?",
+            (status, task_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def update_task_progress(self, task_id: int, progress: int) -> bool:
+        """更新任务进度。"""
+        await self._ensure_sect_schema()
+        cur = await self.db.execute(
+            "UPDATE sect_tasks SET current_count = ? WHERE task_id = ?",
+            (progress, task_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def delete_sect_task(self, task_id: int) -> bool:
+        """删除任务。"""
+        await self._ensure_sect_schema()
+        await self.db.execute("DELETE FROM sect_task_members WHERE task_id = ?", (task_id,))
+        cur = await self.db.execute("DELETE FROM sect_tasks WHERE task_id = ?", (task_id,))
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    # ── 任务参与 ────────────────────────────────────────────
+
+    async def accept_task(self, task_id: int, user_id: str) -> bool:
+        """接受任务。"""
+        await self._ensure_sect_schema()
+        now = time.time()
+        try:
+            await self.db.execute(
+                "INSERT INTO sect_task_members (task_id, user_id, accepted_at) VALUES (?, ?, ?)",
+                (task_id, user_id, now),
+            )
+            await self.db.commit()
+            return True
+        except Exception:
+            return False
+
+    async def get_task_member(self, task_id: int, user_id: str) -> dict | None:
+        """获取成员任务参与情况。"""
+        await self._ensure_sect_schema()
+        cur = await self.db.execute(
+            "SELECT id, task_id, user_id, progress, status, accepted_at, completed_at "
+            "FROM sect_task_members WHERE task_id = ? AND user_id = ?",
+            (task_id, user_id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "task_id": row[1],
+            "user_id": row[2],
+            "progress": row[3],
+            "status": row[4],
+            "accepted_at": row[5],
+            "completed_at": row[6],
+        }
+
+    async def get_task_members(self, task_id: int) -> list[dict]:
+        """获取任务所有参与者。"""
+        await self._ensure_sect_schema()
+        cur = await self.db.execute(
+            "SELECT id, task_id, user_id, progress, status, accepted_at, completed_at "
+            "FROM sect_task_members WHERE task_id = ?",
+            (task_id,),
+        )
+        rows = await cur.fetchall()
+        return [{
+            "id": r[0],
+            "task_id": r[1],
+            "user_id": r[2],
+            "progress": r[3],
+            "status": r[4],
+            "accepted_at": r[5],
+            "completed_at": r[6],
+        } for r in rows]
+
+    async def update_task_member_progress(self, task_id: int, user_id: str, progress: int) -> bool:
+        """更新成员任务进度。"""
+        await self._ensure_sect_schema()
+        cur = await self.db.execute(
+            "UPDATE sect_task_members SET progress = ?, status = 'accepted' WHERE task_id = ? AND user_id = ?",
+            (progress, task_id, user_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def complete_task_member(self, task_id: int, user_id: str) -> bool:
+        """标记成员完成任务。"""
+        await self._ensure_sect_schema()
+        now = time.time()
+        cur = await self.db.execute(
+            "UPDATE sect_task_members SET status = 'completed', completed_at = ? WHERE task_id = ? AND user_id = ?",
+            (now, task_id, user_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    # ── 邮件系统 ──────────────────────────────────────────────
+
+    async def send_mail(self, sender_id: str, sender_name: str, receiver_id: str, title: str, content: str, attachments: str = "{}") -> int:
+        """发送邮件。"""
+        now = time.time()
+        expires_at = now + 7 * 24 * 3600
+        cur = await self.db.execute(
+            """INSERT INTO mails (sender_id, sender_name, receiver_id, title, content, attachments, created_at, expires_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (sender_id, sender_name, receiver_id, title, content, attachments, now, expires_at),
+        )
+        await self.db.commit()
+        return int(cur.lastrowid or 0)
+
+    async def get_mails(self, user_id: str, include_deleted: bool = False) -> list[dict]:
+        """获取用户邮件列表。"""
+        if include_deleted:
+            cur = await self.db.execute(
+                "SELECT mail_id, sender_id, sender_name, title, content, attachments, is_read, created_at, expires_at FROM mails WHERE receiver_id = ? ORDER BY created_at DESC",
+                (user_id,),
+            )
+        else:
+            cur = await self.db.execute(
+                "SELECT mail_id, sender_id, sender_name, title, content, attachments, is_read, created_at, expires_at FROM mails WHERE receiver_id = ? AND is_deleted_receiver = 0 ORDER BY created_at DESC",
+                (user_id,),
+            )
+        rows = await cur.fetchall()
+        now = time.time()
+        result = []
+        for r in rows:
+            if r[8] and r[8] < now:
+                continue
+            result.append({
+                "mail_id": r[0],
+                "sender_id": r[1],
+                "sender_name": r[2],
+                "title": r[3],
+                "content": r[4],
+                "attachments": json.loads(r[5]) if r[5] else {},
+                "is_read": bool(r[6]),
+                "created_at": r[7],
+                "expires_at": r[8],
+            })
+        return result
+
+    async def get_mail(self, mail_id: int, user_id: str) -> dict | None:
+        """获取单封邮件。"""
+        cur = await self.db.execute(
+            "SELECT mail_id, sender_id, sender_name, receiver_id, title, content, attachments, is_read, created_at, expires_at FROM mails WHERE mail_id = ? AND receiver_id = ?",
+            (mail_id, user_id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        return {
+            "mail_id": row[0],
+            "sender_id": row[1],
+            "sender_name": row[2],
+            "receiver_id": row[3],
+            "title": row[4],
+            "content": row[5],
+            "attachments": json.loads(row[6]) if row[6] else {},
+            "is_read": bool(row[7]),
+            "created_at": row[8],
+            "expires_at": row[9],
+        }
+
+    async def mark_mail_read(self, mail_id: int, user_id: str) -> bool:
+        """标记邮件为已读。"""
+        cur = await self.db.execute(
+            "UPDATE mails SET is_read = 1 WHERE mail_id = ? AND receiver_id = ?",
+            (mail_id, user_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def delete_mail(self, mail_id: int, user_id: str) -> bool:
+        """删除邮件。"""
+        cur = await self.db.execute(
+            "UPDATE mails SET is_deleted_receiver = 1 WHERE mail_id = ? AND receiver_id = ?",
+            (mail_id, user_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    # ── 成就系统 ──────────────────────────────────────────────
+
+    async def get_all_achievements(self) -> list[dict]:
+        """获取所有成就定义。"""
+        cur = await self.db.execute(
+            "SELECT achievement_id, name, description, icon, condition_type, condition_value, reward_stones, reward_items, reward_title, sort_order FROM achievements ORDER BY sort_order"
+        )
+        rows = await cur.fetchall()
+        return [{
+            "achievement_id": r[0],
+            "name": r[1],
+            "description": r[2],
+            "icon": r[3],
+            "condition_type": r[4],
+            "condition_value": r[5],
+            "reward_stones": r[6],
+            "reward_items": json.loads(r[7]) if r[7] else {},
+            "reward_title": r[8],
+            "sort_order": r[9],
+        } for r in rows]
+
+    async def get_player_achievements(self, user_id: str) -> list[dict]:
+        """获取玩家成就进度。"""
+        cur = await self.db.execute(
+            "SELECT achievement_id, progress, completed, completed_at, claimed FROM player_achievements WHERE user_id = ?",
+            (user_id,),
+        )
+        rows = await cur.fetchall()
+        return [{
+            "achievement_id": r[0],
+            "progress": r[1],
+            "completed": bool(r[2]),
+            "completed_at": r[3],
+            "claimed": bool(r[4]),
+        } for r in rows]
+
+    async def update_achievement_progress(self, user_id: str, achievement_id: str, progress: int) -> bool:
+        """更新成就进度。"""
+        cur = await self.db.execute(
+            """INSERT INTO player_achievements (user_id, achievement_id, progress) VALUES (?, ?, ?)
+               ON CONFLICT(user_id, achievement_id) DO UPDATE SET progress = ?""",
+            (user_id, achievement_id, progress, progress),
+        )
+        await self.db.commit()
+        return True
+
+    async def complete_achievement(self, user_id: str, achievement_id: str) -> bool:
+        """完成成就。"""
+        now = time.time()
+        cur = await self.db.execute(
+            "UPDATE player_achievements SET completed = 1, completed_at = ? WHERE user_id = ? AND achievement_id = ?",
+            (now, user_id, achievement_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def claim_achievement_reward(self, user_id: str, achievement_id: str) -> dict | None:
+        """领取成就奖励。"""
+        cur = await self.db.execute(
+            "SELECT reward_stones, reward_items, reward_title FROM achievements WHERE achievement_id = ?",
+            (achievement_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        
+        cur2 = await self.db.execute(
+            "UPDATE player_achievements SET claimed = 1 WHERE user_id = ? AND achievement_id = ?",
+            (user_id, achievement_id),
+        )
+        await self.db.commit()
+        
+        return {
+            "reward_stones": row[0] or 0,
+            "reward_items": json.loads(row[1]) if row[1] else {},
+            "reward_title": row[2],
+        }
+
+    async def admin_create_achievement(self, achievement_id: str, name: str, description: str, icon: str, condition_type: str, condition_value: int, reward_stones: int, reward_items: str, reward_title: str, sort_order: int = 0) -> bool:
+        """管理员创建成就。"""
+        cur = await self.db.execute(
+            """INSERT OR REPLACE INTO achievements (achievement_id, name, description, icon, condition_type, condition_value, reward_stones, reward_items, reward_title, sort_order)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (achievement_id, name, description, icon, condition_type, condition_value, reward_stones, reward_items, reward_title, sort_order),
+        )
+        await self.db.commit()
+        return True
+
+    async def admin_delete_achievement(self, achievement_id: str) -> bool:
+        """管理员删除成就。"""
+        cur = await self.db.execute("DELETE FROM achievements WHERE achievement_id = ?", (achievement_id,))
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    # ── 称号系统 ──────────────────────────────────────────────
+
+    async def get_all_titles(self) -> list[dict]:
+        """获取所有称号定义。"""
+        cur = await self.db.execute(
+            "SELECT title_id, name, description, icon, color, prefix, bonus_attack, bonus_defense, bonus_hp, is_system FROM titles"
+        )
+        rows = await cur.fetchall()
+        return [{
+            "title_id": r[0],
+            "name": r[1],
+            "description": r[2],
+            "icon": r[3],
+            "color": r[4],
+            "prefix": r[5],
+            "bonus_attack": r[6],
+            "bonus_defense": r[7],
+            "bonus_hp": r[8],
+            "is_system": bool(r[9]),
+        } for r in rows]
+
+    async def get_player_titles(self, user_id: str) -> list[dict]:
+        """获取玩家拥有的称号。"""
+        cur = await self.db.execute(
+            "SELECT title_id, is_active, acquired_at FROM player_titles WHERE user_id = ?",
+            (user_id,),
+        )
+        rows = await cur.fetchall()
+        return [{
+            "title_id": r[0],
+            "is_active": bool(r[1]),
+            "acquired_at": r[2],
+        } for r in rows]
+
+    async def grant_title(self, user_id: str, title_id: str) -> bool:
+        """授予玩家称号。"""
+        now = time.time()
+        cur = await self.db.execute(
+            """INSERT OR IGNORE INTO player_titles (user_id, title_id, is_active, acquired_at) VALUES (?, ?, 0, ?)""",
+            (user_id, title_id, now),
+        )
+        await self.db.commit()
+        return True
+
+    async def activate_title(self, user_id: str, title_id: str) -> bool:
+        """激活玩家称号。"""
+        cur = await self.db.execute(
+            "UPDATE player_titles SET is_active = 0 WHERE user_id = ?",
+            (user_id,),
+        )
+        cur = await self.db.execute(
+            "UPDATE player_titles SET is_active = 1 WHERE user_id = ? AND title_id = ?",
+            (user_id, title_id),
+        )
+        await self.db.commit()
+        return True
+
+    async def deactivate_title(self, user_id: str) -> bool:
+        """停用玩家当前称号。"""
+        cur = await self.db.execute(
+            "UPDATE player_titles SET is_active = 0 WHERE user_id = ?",
+            (user_id,),
+        )
+        await self.db.commit()
+        return True
+
+    async def admin_create_title(self, title_id: str, name: str, description: str, icon: str, color: str, prefix: str, bonus_attack: int, bonus_defense: int, bonus_hp: int, is_system: int = 0) -> bool:
+        """管理员创建称号。"""
+        now = time.time()
+        cur = await self.db.execute(
+            """INSERT OR REPLACE INTO titles (title_id, name, description, icon, color, prefix, bonus_attack, bonus_defense, bonus_hp, is_system, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (title_id, name, description, icon, color, prefix, bonus_attack, bonus_defense, bonus_hp, is_system, now),
+        )
+        await self.db.commit()
+        return True
+
+    async def admin_delete_title(self, title_id: str) -> bool:
+        """管理员删除称号。"""
+        cur = await self.db.execute("DELETE FROM titles WHERE title_id = ?", (title_id,))
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    # ── 装备强化配置 ──────────────────────────────────────────────
+
+    async def get_enhance_configs(self) -> list[dict]:
+        """获取所有强化配置。"""
+        cur = await self.db.execute(
+            "SELECT equipment_type, level, success_rate, cost_stones, cost_item_id, cost_item_count, bonus_attack, bonus_defense, bonus_hp FROM enhance_configs ORDER BY equipment_type, level"
+        )
+        rows = await cur.fetchall()
+        return [{
+            "equipment_type": r[0],
+            "level": r[1],
+            "success_rate": r[2],
+            "cost_stones": r[3],
+            "cost_item_id": r[4],
+            "cost_item_count": r[5],
+            "bonus_attack": r[6],
+            "bonus_defense": r[7],
+            "bonus_hp": r[8],
+        } for r in rows]
+
+    async def get_enhance_config(self, equipment_type: str, level: int) -> dict | None:
+        """获取指定强化配置。"""
+        cur = await self.db.execute(
+            "SELECT equipment_type, level, success_rate, cost_stones, cost_item_id, cost_item_count, bonus_attack, bonus_defense, bonus_hp FROM enhance_configs WHERE equipment_type = ? AND level = ?",
+            (equipment_type, level),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return None
+        return {
+            "equipment_type": row[0],
+            "level": row[1],
+            "success_rate": row[2],
+            "cost_stones": row[3],
+            "cost_item_id": row[4],
+            "cost_item_count": row[5],
+            "bonus_attack": row[6],
+            "bonus_defense": row[7],
+            "bonus_hp": row[8],
+        }
+
+    async def admin_save_enhance_config(self, equipment_type: str, level: int, success_rate: float, cost_stones: int, cost_item_id: str, cost_item_count: int, bonus_attack: int, bonus_defense: int, bonus_hp: int) -> bool:
+        """保存强化配置。"""
+        cur = await self.db.execute(
+            """INSERT OR REPLACE INTO enhance_configs (equipment_type, level, success_rate, cost_stones, cost_item_id, cost_item_count, bonus_attack, bonus_defense, bonus_hp)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (equipment_type, level, success_rate, cost_stones, cost_item_id, cost_item_count, bonus_attack, bonus_defense, bonus_hp),
+        )
+        await self.db.commit()
+        return True
+
+    async def admin_delete_enhance_config(self, equipment_type: str, level: int) -> bool:
+        """删除强化配置。"""
+        cur = await self.db.execute(
+            "DELETE FROM enhance_configs WHERE equipment_type = ? AND level = ?",
+            (equipment_type, level),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def log_enhance(self, user_id: str, equipment_type: str, equipment_name: str, from_level: int, to_level: int, success: bool, cost_stones: int) -> bool:
+        """记录强化日志。"""
+        now = time.time()
+        cur = await self.db.execute(
+            """INSERT INTO player_enhance_log (user_id, equipment_type, equipment_name, from_level, to_level, success, cost_stones, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, equipment_type, equipment_name, from_level, to_level, 1 if success else 0, cost_stones, now),
+        )
+        await self.db.commit()
+        return True
+
+    # ══════════════════════════════════════════════════════════════
+    # 同伴系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def get_player_companions(self, user_id: str) -> list[dict]:
+        """获取玩家所有同伴。"""
+        cur = await self.db.execute(
+            "SELECT companion_id, loyalty, gifts_given, last_gift_time, is_active FROM player_companions WHERE user_id = ?",
+            (user_id,),
+        )
+        rows = await cur.fetchall()
+        return [{
+            "companion_id": r[0],
+            "loyalty": r[1],
+            "gifts_given": r[2],
+            "last_gift_time": r[3],
+            "is_active": bool(r[4]),
+        } for r in rows]
+
+    async def add_player_companion(self, user_id: str, companion_id: str) -> bool:
+        """添加同伴。"""
+        try:
+            cur = await self.db.execute(
+                "INSERT INTO player_companions (user_id, companion_id) VALUES (?, ?)",
+                (user_id, companion_id),
+            )
+            await self.db.commit()
+            return True
+        except Exception:
+            return False
+
+    async def update_companion_loyalty(self, user_id: str, companion_id: str, loyalty_change: int, gifts_given: int = 0) -> bool:
+        """更新同伴忠诚度。"""
+        import time as _time
+        cur = await self.db.execute(
+            """UPDATE player_companions
+               SET loyalty = MIN(100, MAX(0, loyalty + ?)),
+                   gifts_given = gifts_given + ?,
+                   last_gift_time = ?
+               WHERE user_id = ? AND companion_id = ?""",
+            (loyalty_change, gifts_given, _time.time(), user_id, companion_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def set_companion_active(self, user_id: str, companion_id: str, active: bool) -> bool:
+        """设置同伴是否出战。"""
+        cur = await self.db.execute(
+            "UPDATE player_companions SET is_active = ? WHERE user_id = ? AND companion_id = ?",
+            (1 if active else 0, user_id, companion_id),
+        )
+        await self.db.commit()
+        return (cur.rowcount or 0) > 0
+
+    async def has_companion(self, user_id: str, companion_id: str) -> bool:
+        """检查玩家是否拥有某同伴。"""
+        cur = await self.db.execute(
+            "SELECT 1 FROM player_companions WHERE user_id = ? AND companion_id = ? LIMIT 1",
+            (user_id, companion_id),
+        )
+        return (await cur.fetchone()) is not None
+
+    # ══════════════════════════════════════════════════════════════
+    # 部队系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def get_player_troops(self, user_id: str) -> dict[str, int]:
+        """获取玩家部队 {troop_id: count}。"""
+        cur = await self.db.execute(
+            "SELECT troop_id, count FROM player_troops WHERE user_id = ? AND count > 0",
+            (user_id,),
+        )
+        rows = await cur.fetchall()
+        return {r[0]: r[1] for r in rows}
+
+    async def add_player_troops(self, user_id: str, troop_id: str, count: int) -> bool:
+        """增加部队数量。"""
+        cur = await self.db.execute(
+            """INSERT INTO player_troops (user_id, troop_id, count)
+               VALUES (?, ?, ?)
+               ON CONFLICT(user_id, troop_id) DO UPDATE SET count = count + ?""",
+            (user_id, troop_id, count, count),
+        )
+        await self.db.commit()
+        return True
+
+    async def remove_player_troops(self, user_id: str, troop_id: str, count: int) -> int:
+        """减少部队数量，返回实际减少的数量。"""
+        cur = await self.db.execute(
+            "SELECT count FROM player_troops WHERE user_id = ? AND troop_id = ?",
+            (user_id, troop_id),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return 0
+        current = row[0]
+        actual = min(current, count)
+        new_count = current - actual
+        if new_count <= 0:
+            await self.db.execute(
+                "DELETE FROM player_troops WHERE user_id = ? AND troop_id = ?",
+                (user_id, troop_id),
+            )
+        else:
+            await self.db.execute(
+                "UPDATE player_troops SET count = ? WHERE user_id = ? AND troop_id = ?",
+                (new_count, user_id, troop_id),
+            )
+        await self.db.commit()
+        return actual
+
+    async def get_total_troop_count(self, user_id: str) -> int:
+        """获取玩家部队总数。"""
+        cur = await self.db.execute(
+            "SELECT COALESCE(SUM(count), 0) FROM player_troops WHERE user_id = ?",
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
+    # ══════════════════════════════════════════════════════════════
+    # 竞技场系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def record_tournament_result(self, user_id: str, opponent_id: str, result: str, reward_gold: int, reward_dao_yun: int, win_streak: int, streak_bonus: str) -> bool:
+        """记录竞技场战斗结果。"""
+        import time as _time
+        cur = await self.db.execute(
+            """INSERT INTO tournament_records (user_id, opponent_id, result, reward_gold, reward_dao_yun, win_streak, streak_bonus, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, opponent_id, result, reward_gold, reward_dao_yun, win_streak, streak_bonus, _time.time()),
+        )
+        await self.db.commit()
+        return True
+
+    async def get_tournament_history(self, user_id: str, limit: int = 20) -> list[dict]:
+        """获取竞技场历史记录。"""
+        cur = await self.db.execute(
+            """SELECT opponent_id, result, reward_gold, reward_dao_yun, win_streak, streak_bonus, created_at
+               FROM tournament_records WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT ?""",
+            (user_id, limit),
+        )
+        rows = await cur.fetchall()
+        return [{
+            "opponent_id": r[0],
+            "result": r[1],
+            "reward_gold": r[2],
+            "reward_dao_yun": r[3],
+            "win_streak": r[4],
+            "streak_bonus": r[5],
+            "created_at": r[6],
+        } for r in rows]
+
+    async def get_current_win_streak(self, user_id: str) -> int:
+        """获取当前连胜数（从最近一次失败后计算）。"""
+        cur = await self.db.execute(
+            """SELECT result FROM tournament_records WHERE user_id = ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (user_id,),
+        )
+        row = await cur.fetchone()
+        if not row:
+            return 0
+        if row[0] == "win":
+            cur2 = await self.db.execute(
+                """SELECT win_streak FROM tournament_records WHERE user_id = ?
+                   ORDER BY created_at DESC LIMIT 1""",
+                (user_id,),
+            )
+            row2 = await cur2.fetchone()
+            return row2[0] if row2 else 0
+        return 0

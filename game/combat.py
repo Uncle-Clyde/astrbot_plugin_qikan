@@ -11,6 +11,8 @@ from .constants import (
     get_total_gongfa_bonus,
 )
 from .inventory import add_item
+from .companions import get_companion_buff, PlayerCompanion
+from .troops import calc_troop_damage
 
 
 @dataclass
@@ -26,6 +28,9 @@ class CombatState:
     player_shield_stun: int = 0  # 盾击眩晕回合数
     player_berserk: int = 0      # 狂暴状态持续回合
     player_weakened: int = 0     # 虚弱状态持续回合
+    player_combo: int = 0         # 连击计数
+    player_crit_chance: float = 0.05  # 暴击率
+    skill_cooldowns: dict[str, int] = field(default_factory=dict)  # 技能冷却 {action: remaining_rounds}
     enemy_name: str = ""
     enemy_type: str = "monster"  # monster | enemy | player
     enemy_hp: int = 0
@@ -35,10 +40,13 @@ class CombatState:
     enemy_stunned: int = 0       # 敌人眩晕回合数
     enemy_weakened: int = 0      # 敌人虚弱回合数
     enemy_realm_name: str = ""
+    enemy_intent: str = ""       # 敌人下回合意图
     round_number: int = 0
     max_rounds: int = COMBAT_MAX_ROUNDS
     combat_log: list[str] = field(default_factory=list)
     status: str = "player_turn"  # player_turn | enemy_turn | combat_end
+    total_damage_dealt: int = 0  # 累计伤害
+    total_damage_taken: int = 0  # 累计受伤
 
     def to_dict(self) -> dict:
         return {
@@ -52,6 +60,9 @@ class CombatState:
             "player_shield_stun": self.player_shield_stun,
             "player_berserk": self.player_berserk,
             "player_weakened": self.player_weakened,
+            "player_combo": self.player_combo,
+            "player_crit_chance": self.player_crit_chance,
+            "skill_cooldowns": dict(self.skill_cooldowns),
             "enemy_name": self.enemy_name,
             "enemy_type": self.enemy_type,
             "enemy_hp": self.enemy_hp,
@@ -61,6 +72,7 @@ class CombatState:
             "enemy_stunned": self.enemy_stunned,
             "enemy_weakened": self.enemy_weakened,
             "enemy_realm_name": self.enemy_realm_name,
+            "enemy_intent": self.enemy_intent,
             "round_number": self.round_number,
             "max_rounds": self.max_rounds,
             "combat_log": list(self.combat_log[-20:]),
@@ -72,12 +84,47 @@ class CombatEngine:
     """回合制战斗引擎，处理玩家动作和敌人AI - 骑砍风格。"""
 
     @staticmethod
-    def _calc_damage(atk: int, dfn: int, defending: bool) -> int:
-        """基础伤害公式。"""
-        raw = max(1, int(atk * random.uniform(0.85, 1.15) - dfn * 0.6))
+    def _calc_damage(atk: int, dfn: int, defending: bool, crit_chance: float = 0, combo: int = 0) -> tuple[int, bool]:
+        """基础伤害公式。返回(伤害值, 是否暴击)。"""
+        is_crit = random.random() < crit_chance
+        crit_multiplier = 1.5 if is_crit else 1.0
+        
+        combo_bonus = 1.0 + (combo * 0.05) if combo > 0 else 1.0
+        
+        raw = max(1, int(atk * random.uniform(0.85, 1.15) * crit_multiplier * combo_bonus - dfn * 0.6))
         if defending:
             raw = max(1, raw // 2)
-        return raw
+        return raw, is_crit
+
+    @staticmethod
+    def _get_combat_bonuses(player) -> dict:
+        """计算同伴和部队提供的战斗加成。"""
+        attack_bonus = 0
+        defense_bonus = 0
+        hp_bonus = 0
+        crit_bonus = 0.0
+
+        # 同伴加成
+        if hasattr(player, 'active_companions'):
+            for comp in player.active_companions:
+                if isinstance(comp, PlayerCompanion) and comp.is_active:
+                    buff = get_companion_buff(comp)
+                    attack_bonus += buff.get("attack", 0)
+                    defense_bonus += buff.get("defense", 0)
+                    hp_bonus += buff.get("hp", 0)
+                    crit_bonus += buff.get("crit", 0)
+
+        # 部队加成
+        if hasattr(player, 'troops') and player.troops:
+            troop_atk = calc_troop_damage(player.troops)
+            attack_bonus += troop_atk
+
+        return {
+            "attack": attack_bonus,
+            "defense": defense_bonus,
+            "hp": hp_bonus,
+            "crit": crit_bonus,
+        }
 
     @staticmethod
     def resolve_player_action(
@@ -85,7 +132,7 @@ class CombatEngine:
     ) -> dict:
         """处理玩家回合动作 - 骑砍风格。
 
-        action: attack | defend | gongfa | item | flee | charge | shield_bash | battle_cry | berserk | feint
+        action: attack | defend | gongfa | item | flee | charge | shield_bash | berserk
         返回 {"success": bool, "message": str, "combat_end": bool, ...}
         """
         if state.status != "player_turn":
@@ -106,23 +153,46 @@ class CombatEngine:
             state.status = "enemy_turn"
             return result
 
+        # 递减技能冷却
+        expired_skills = []
+        for skill_name, remaining in state.skill_cooldowns.items():
+            if remaining <= 1:
+                expired_skills.append(skill_name)
+            else:
+                state.skill_cooldowns[skill_name] = remaining - 1
+        for skill_name in expired_skills:
+            del state.skill_cooldowns[skill_name]
+
         # 检查玩家狂暴状态
         if state.player_berserk > 0:
             state.player_berserk -= 1
 
         if action == "attack":
-            # 狂暴状态加成
             atk_bonus = int(state.player_attack * 0.3) if state.player_berserk > 0 else 0
-            dmg = CombatEngine._calc_damage(
-                state.player_attack + atk_bonus, state.enemy_defense, False
+            
+            dmg, is_crit = CombatEngine._calc_damage(
+                state.player_attack + atk_bonus, 
+                state.enemy_defense, 
+                False,
+                state.player_crit_chance,
+                state.player_combo
             )
             state.enemy_hp = max(0, state.enemy_hp - dmg)
+            state.player_combo = min(state.player_combo + 1, 10)
+            state.total_damage_dealt += dmg
+            
             msg = f"你发动攻击，造成{dmg}点伤害"
+            if is_crit:
+                msg = f"你发动攻击，造成{dmg}点暴击伤害！"
             if atk_bonus > 0:
-                msg += f"（狂暴加成+{atk_bonus}）"
+                msg += f"（狂暴+{atk_bonus}）"
+            if state.player_combo > 1:
+                msg += f"（连击x{state.player_combo}）"
             state.combat_log.append(msg)
             result["message"] = msg
             result["damage"] = dmg
+            result["is_crit"] = is_crit
+            result["combo"] = state.player_combo
 
         elif action == "defend":
             state.player_defending = True
@@ -131,76 +201,64 @@ class CombatEngine:
             result["message"] = msg
 
         elif action == "charge":
-            # 冲锋 - 高伤害但消耗体力
+            if state.skill_cooldowns.get("charge", 0) > 0:
+                return {"success": False, "message": f"冲锋冷却中，还需{state.skill_cooldowns['charge']}回合"}
             charge_cost = 20
             if state.player_lingqi < charge_cost:
                 return {"success": False, "message": f"体力不足，需要{charge_cost}体力"}
             state.player_lingqi -= charge_cost
+            state.skill_cooldowns["charge"] = 2
             
             # 冲锋伤害增加50%
-            dmg = int(CombatEngine._calc_damage(
-                state.player_attack, state.enemy_defense, False
-            ) * 1.5)
+            dmg, _ = CombatEngine._calc_damage(
+                state.player_attack, state.enemy_defense, False, state.player_crit_chance, state.player_combo
+            )
+            dmg = int(dmg * 1.5)
             state.enemy_hp = max(0, state.enemy_hp - dmg)
-            msg = f"你发起冲锋！造成{dmg}点伤害！（消耗{charge_cost}体力）"
+            state.player_combo = min(state.player_combo + 1, 10)
+            state.total_damage_dealt += dmg
+            msg = f"你发起冲锋！造成{dmg}点伤害！（消耗{charge_cost}体力，冷却2回合）"
+            if state.player_combo > 1:
+                msg += f"（连击x{state.player_combo}）"
             state.combat_log.append(msg)
             result["message"] = msg
             result["damage"] = dmg
 
         elif action == "shield_bash":
-            # 盾击 - 眩晕敌人
+            if state.skill_cooldowns.get("shield_bash", 0) > 0:
+                return {"success": False, "message": f"盾击冷却中，还需{state.skill_cooldowns['shield_bash']}回合"}
             shield_cost = 15
             if state.player_lingqi < shield_cost:
                 return {"success": False, "message": f"体力不足，需要{shield_cost}体力"}
             state.player_lingqi -= shield_cost
+            state.skill_cooldowns["shield_bash"] = 2
             
-            dmg = CombatEngine._calc_damage(
-                state.player_attack, state.enemy_defense, False
+            dmg, _ = CombatEngine._calc_damage(
+                state.player_attack, state.enemy_defense, False, state.player_crit_chance, state.player_combo
             )
             state.enemy_hp = max(0, state.enemy_hp - dmg)
-            state.enemy_stunned = 1  # 眩晕1回合
-            msg = f"你用盾牌猛击！造成{dmg}点伤害，敌人眩晕1回合！（消耗{shield_cost}体力）"
+            state.enemy_stunned = 1
+            state.player_combo = min(state.player_combo + 1, 10)
+            state.total_damage_dealt += dmg
+            msg = f"你用盾牌猛击！造成{dmg}点伤害，敌人眩晕1回合！（消耗{shield_cost}体力，冷却2回合）"
             state.combat_log.append(msg)
             result["message"] = msg
             result["damage"] = dmg
 
-        elif action == "battle_cry":
-            # 战吼 - 降低敌人防御
-            cry_cost = 18
-            if state.player_lingqi < cry_cost:
-                return {"success": False, "message": f"体力不足，需要{cry_cost}体力"}
-            state.player_lingqi -= cry_cost
-            
-            weaken = int(state.enemy_defense * 0.25)
-            state.enemy_weakened = 2  # 虚弱2回合
-            msg = f"你发出震天的战吼！敌人防御力下降{weaken}点！（消耗{cry_cost}体力）"
-            state.combat_log.append(msg)
-            result["message"] = msg
-
         elif action == "berserk":
-            # 狂暴 - 大幅提升攻击，降低防御
+            if state.skill_cooldowns.get("berserk", 0) > 0:
+                return {"success": False, "message": f"狂暴冷却中，还需{state.skill_cooldowns['berserk']}回合"}
             berserk_cost = 25
             if state.player_lingqi < berserk_cost:
                 return {"success": False, "message": f"体力不足，需要{berserk_cost}体力"}
             state.player_lingqi -= berserk_cost
+            state.skill_cooldowns["berserk"] = 3
             
             state.player_berserk = 2  # 持续2回合
             state.player_defending = True  # 狂暴时自动防御
             msg = f"你进入狂暴状态！接下来2回合攻击+30%，但会自动防御！（消耗{berserk_cost}体力）"
             state.combat_log.append(msg)
             result["message"] = msg
-
-        elif action == "feint":
-            # 虚晃 - 闪避敌人攻击
-            feint_cost = 12
-            if state.player_lingqi < feint_cost:
-                return {"success": False, "message": f"体力不足，需要{feint_cost}体力"}
-            state.player_lingqi -= feint_cost
-            
-            msg = f"你虚晃一招，敌人扑空！下回合必定闪避攻击！（消耗{feint_cost}体力）"
-            state.combat_log.append(msg)
-            result["message"] = msg
-            result["feint_success"] = True
 
         elif action == "gongfa":
             gf_result = CombatEngine._apply_gongfa_effect(state, player, data)
@@ -258,34 +316,81 @@ class CombatEngine:
             state.status = "player_turn"
             return result
 
-        # 虚弱状态处理
+        # 虚弱状态处理 - 降低敌人攻击力
         if state.enemy_weakened > 0:
             state.enemy_weakened -= 1
-        effective_def = state.player_defense
+        effective_enemy_atk = state.enemy_attack
         if state.enemy_weakened > 0:
-            effective_def = int(effective_def * 1.25)  # 虚弱时防御增加
+            effective_enemy_atk = int(effective_enemy_atk * 0.75)  # 敌人攻击降低25%
 
-        # 敌人AI: 70%攻击, 20%防御, 10%特殊动作
-        roll = random.random()
-        if roll < 0.7:
-            dmg = CombatEngine._calc_damage(
-                state.enemy_attack, effective_def, state.player_defending
+        # 敌人AI - 自适应策略
+        enemy_hp_pct = state.enemy_hp / state.enemy_max_hp if state.enemy_max_hp > 0 else 1.0
+        player_hp_pct = state.player_hp / state.player_max_hp if state.player_max_hp > 0 else 1.0
+        
+        # 低血量时提高防御概率
+        if enemy_hp_pct < 0.15:
+            # 濒死时30%概率防御
+            roll = random.random()
+            if roll < 0.5:
+                action_choice = "attack"
+            elif roll < 0.8:
+                action_choice = "defend"
+            else:
+                action_choice = "special"
+        elif enemy_hp_pct < 0.3:
+            # 低血量时提高防御
+            roll = random.random()
+            if roll < 0.5:
+                action_choice = "attack"
+            elif roll < 0.85:
+                action_choice = "defend"
+            else:
+                action_choice = "special"
+        elif state.player_defending:
+            # 玩家防御时提高特殊攻击概率
+            roll = random.random()
+            if roll < 0.5:
+                action_choice = "attack"
+            elif roll < 0.7:
+                action_choice = "defend"
+            else:
+                action_choice = "special"
+        else:
+            # 正常状态
+            roll = random.random()
+            if roll < 0.7:
+                action_choice = "attack"
+            elif roll < 0.9:
+                action_choice = "defend"
+            else:
+                action_choice = "special"
+        
+        # 显示敌人意图
+        state.enemy_intent = action_choice
+        
+        # 执行敌人行动
+        if action_choice == "attack":
+            dmg, _ = CombatEngine._calc_damage(
+                effective_enemy_atk, state.player_defense, state.player_defending
             )
             state.player_hp = max(0, state.player_hp - dmg)
+            state.total_damage_taken += dmg
             msg = f"{state.enemy_name}发动攻击，造成{dmg}点伤害"
             state.combat_log.append(msg)
             result["message"] = msg
             result["damage"] = dmg
-        elif roll < 0.9:
+            state.player_combo = 0
+        elif action_choice == "defend":
             msg = f"{state.enemy_name}摆出防御姿态"
             state.combat_log.append(msg)
             result["message"] = msg
         else:
-            # 敌人特殊攻击
-            special_dmg = int(CombatEngine._calc_damage(
-                state.enemy_attack, effective_def, False
-            ) * 1.3)
+            special_dmg, _ = CombatEngine._calc_damage(
+                effective_enemy_atk, state.player_defense, False
+            )
+            special_dmg = int(special_dmg * 1.3)
             state.player_hp = max(0, state.player_hp - special_dmg)
+            state.total_damage_taken += special_dmg
             msg = f"{state.enemy_name}使出强力攻击！造成{special_dmg}点伤害！"
             state.combat_log.append(msg)
             result["message"] = msg
@@ -351,12 +456,15 @@ class CombatEngine:
 
         # 攻击效果
         if bonus["attack_bonus"] > 0:
-            dmg = CombatEngine._calc_damage(
+            dmg, is_crit = CombatEngine._calc_damage(
                 state.player_attack + int(bonus["attack_bonus"] * 1.5),
-                state.enemy_defense, False,
+                state.enemy_defense, False, state.player_crit_chance, state.player_combo
             )
             state.enemy_hp = max(0, state.enemy_hp - dmg)
-            msgs.append(f"技能攻击造成{dmg}点伤害")
+            state.player_combo = min(state.player_combo + 1, 10)
+            state.total_damage_dealt += dmg
+            crit_msg = "暴击！" if is_crit else ""
+            msgs.append(f"技能攻击造成{dmg}点伤害{crit_msg}")
 
         # 防御效果
         if bonus["defense_bonus"] > 0:
@@ -465,36 +573,25 @@ MB_COMBAT_ACTIONS = {
     "charge": {
         "name": "冲锋",
         "name_en": "Charge",
-        "desc": "高伤害冲锋，消耗20体力",
+        "desc": "高伤害冲锋，消耗20体力，冷却2回合",
         "cost": 20,
+        "cooldown": 2,
         "type": "mb_skill",
     },
     "shield_bash": {
         "name": "盾击",
         "name_en": "Shield Bash",
-        "desc": "用盾牌眩晕敌人1回合，消耗15体力",
+        "desc": "用盾牌眩晕敌人1回合，消耗15体力，冷却2回合",
         "cost": 15,
-        "type": "mb_skill",
-    },
-    "battle_cry": {
-        "name": "战吼",
-        "name_en": "Battle Cry",
-        "desc": "降低敌人防御2回合，消耗18体力",
-        "cost": 18,
+        "cooldown": 2,
         "type": "mb_skill",
     },
     "berserk": {
         "name": "狂暴",
         "name_en": "Berserk",
-        "desc": "2回合内攻击+30%，自动防御，消耗25体力",
+        "desc": "2回合内攻击+30%，自动防御，消耗25体力，冷却3回合",
         "cost": 25,
-        "type": "mb_skill",
-    },
-    "feint": {
-        "name": "虚晃",
-        "name_en": "Feint",
-        "desc": "下回合必定闪避，消耗12体力",
-        "cost": 12,
+        "cooldown": 3,
         "type": "mb_skill",
     },
     "flee": {

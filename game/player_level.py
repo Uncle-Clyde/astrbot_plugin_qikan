@@ -32,7 +32,9 @@ for level in range(1, MAX_LEVEL + 1):
     
     LEVEL_CONFIG[level] = {
         "exp_to_next": exp_needed,
-        "attribute_points": 2 if level <= 50 else 1,  # 50级前每级2点，50级后每级1点
+        "attribute_points": 1,  # 每级1点属性
+        "skill_points_base": 1,  # 基础技能点
+        "skill_points_int_bonus": 1,  # 每点智力额外获得1技能点
         "hp_bonus": 10 + level * 2,
         "attack_bonus": 1 + level // 10,
         "defense_bonus": 1 + level // 15,
@@ -242,7 +244,13 @@ class LevelSystem:
         if player.exp >= exp_needed:
             player.exp -= exp_needed
             player.level += 1
-            player.unallocated_points += config["attribute_points"]
+            
+            # 属性点
+            player.attribute_points += config["attribute_points"]
+            
+            # 技能点 = 基础 + 智力加成
+            int_bonus = player.intelligence * config["skill_points_int_bonus"]
+            player.skill_points += config["skill_points_base"] + int_bonus
             
             # 重新计算属性
             LevelSystem.recalculate_stats(player)
@@ -250,15 +258,19 @@ class LevelSystem:
             return {
                 "leveled_up": True,
                 "new_level": player.level,
-                "points_gained": config["attribute_points"],
-                "total_points": player.unallocated_points,
+                "attribute_points_gained": config["attribute_points"],
+                "skill_points_gained": config["skill_points_base"] + int_bonus,
+                "total_attribute_points": player.attribute_points,
+                "total_skill_points": player.skill_points,
             }
         
         return None
     
     @staticmethod
     def recalculate_stats(player: "Player"):
-        """重新计算玩家属性"""
+        """重新计算玩家属性（包括属性和技能加成）"""
+        from .mb_attributes import SKILL_DEFINITIONS, get_skill_bonus, AttributeType
+        
         level = player.level
         config = get_level_config(level)
         
@@ -266,36 +278,150 @@ class LevelSystem:
         base_atk = 10
         base_def = 5
         
+        # 等级加成
         level_hp = config["hp_bonus"]
         level_atk = config["attack_bonus"]
         level_def = config["defense_bonus"]
         
-        attr = player.attributes
+        # 属性加成 (每点属性+2基础效果)
+        str_bonus = player.strength * 2
+        agi_bonus = player.agility * 2
+        int_bonus = player.intelligence * 2
         
-        player.max_hp = base_hp + level_hp + attr.get_hp_bonus() + player.permanent_max_hp_bonus
-        player.attack = base_atk + level_atk + attr.get_attack_bonus() + player.permanent_attack_bonus
-        player.defense = base_def + level_def + attr.get_defense_bonus() + player.permanent_defense_bonus
+        # 技能加成
+        skill_hp = 0
+        skill_atk = 0
+        skill_def = 0
+        
+        for skill_id, skill_level in player.skills.items():
+            bonus = get_skill_bonus(skill_id, skill_level)
+            skill_hp += bonus.get("hp", 0)
+            skill_atk += bonus.get("attack", 0)
+            skill_def += bonus.get("defense", 0)
+        
+        player.max_hp = base_hp + level_hp + str_bonus + skill_hp + player.permanent_max_hp_bonus
+        player.attack = base_atk + level_atk + agi_bonus + skill_atk + player.permanent_attack_bonus
+        player.defense = base_def + level_def + agi_bonus + skill_def + player.permanent_defense_bonus
         
         if player.hp > player.max_hp:
             player.hp = player.max_hp
     
     @staticmethod
-    def allocate_point(player: "Player", attr_type: str) -> dict:
+    def allocate_attribute(player: "Player", attr_type: str) -> dict:
         """分配属性点"""
-        if player.unallocated_points <= 0:
+        if player.attribute_points <= 0:
             return {"success": False, "message": "没有可分配的属性点"}
         
         attr_type = attr_type.lower()
-        if attr_type in ("str", "strength", "力量"):
-            player.attributes.strength += 1
-        elif attr_type in ("agi", "agility", "敏捷"):
-            player.attributes.agility += 1
-        elif attr_type in ("vit", "vitality", "活力"):
-            player.attributes.vitality += 1
-        elif attr_type in ("lead", "leadership", "统御"):
-            player.attributes.leadership += 1
+        if attr_type in ("str", "strength", "力量", "力"):
+            player.strength += 1
+        elif attr_type in ("agi", "agility", "敏捷", "敏"):
+            player.agility += 1
+        elif attr_type in ("int", "intelligence", "智力", "智"):
+            player.intelligence += 1
         else:
             return {"success": False, "message": f"无效的属性类型: {attr_type}"}
+        
+        player.attribute_points -= 1
+        LevelSystem.recalculate_stats(player)
+        
+        return {
+            "success": True,
+            "message": f"力量:{player.strength} 敏捷:{player.agility} 智力:{player.intelligence}",
+            "remaining_points": player.attribute_points,
+        }
+    
+    @staticmethod
+    def allocate_skill(player: "Player", skill_id: int) -> dict:
+        """分配技能点"""
+        from .mb_attributes import (
+            SKILL_DEFINITIONS, get_skill_cost, calculate_skill_max_level,
+            get_attribute_requirement, AttributeType
+        )
+        
+        if player.skill_points <= 0:
+            return {"success": False, "message": "没有可分配的技能点"}
+        
+        skill = SKILL_DEFINITIONS.get(skill_id)
+        if not skill:
+            return {"success": False, "message": "无效的技能ID"}
+        
+        current_level = player.skills.get(skill_id, 0)
+        
+        if current_level >= skill.max_level:
+            return {"success": False, "message": f"{skill.name}已满级({skill.max_level}级)"}
+        
+        # 检查属性要求
+        attr_value = {
+            AttributeType.STRENGTH: player.strength,
+            AttributeType.AGILITY: player.agility,
+            AttributeType.INTELLIGENCE: player.intelligence,
+        }[skill.attribute]
+        
+        max_by_attr = calculate_skill_max_level(attr_value, get_attribute_requirement(skill.attribute))
+        
+        if current_level >= max_by_attr:
+            attr_name = AttributeType(skill.attribute).name
+            need = get_attribute_requirement(skill.attribute)
+            return {"success": False, "message": f"需要{need}点{attr_name}才能加{skill.name}"}
+        
+        # 检查技能点是否足够
+        cost = get_skill_cost(skill_id, current_level)
+        if player.skill_points < cost:
+            return {"success": False, "message": f"需要{cost}点技能点，当前只有{player.skill_points}点"}
+        
+        player.skill_points -= cost
+        player.skills[skill_id] = current_level + 1
+        
+        LevelSystem.recalculate_stats(player)
+        
+        return {
+            "success": True,
+            "message": f"{skill.name}升级到{current_level + 1}级",
+            "remaining_skill_points": player.skill_points,
+            "skill_level": current_level + 1,
+        }
+    
+    @staticmethod
+    def get_skill_info(player: "Player") -> dict:
+        """获取玩家技能信息（含可升级上限）"""
+        from .mb_attributes import (
+            SKILL_DEFINITIONS, calculate_skill_max_level,
+            get_attribute_requirement, AttributeType
+        )
+        
+        result = {"skills": {}, "can_upgrade": {}}
+        
+        for skill_id, skill in SKILL_DEFINITIONS.items():
+            current_level = player.skills.get(skill_id, 0)
+            attr_value = {
+                AttributeType.STRENGTH: player.strength,
+                AttributeType.AGILITY: player.agility,
+                AttributeType.INTELLIGENCE: player.intelligence,
+            }[skill.attribute]
+            
+            max_by_attr = calculate_skill_max_level(attr_value, get_attribute_requirement(skill.attribute))
+            
+            result["skills"][skill_id] = {
+                "name": skill.name,
+                "icon": skill.icon,
+                "description": skill.description,
+                "attribute": AttributeType(skill.attribute).name,
+                "current_level": current_level,
+                "max_level": skill.max_level,
+                "max_by_attribute": max_by_attr,
+                "effect": get_skill_bonus(skill_id, current_level),
+            }
+            
+            # 是否可以升级
+            can_upgrade = (
+                player.skill_points > 0 and
+                current_level < skill.max_level and
+                current_level < max_by_attr
+            )
+            result["can_upgrade"][skill_id] = can_upgrade
+        
+        return result
         
         player.unallocated_points -= 1
         LevelSystem.recalculate_stats(player)

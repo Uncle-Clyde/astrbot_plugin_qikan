@@ -28,6 +28,13 @@ from .constants import (
     MOUNT_REGISTRY, MOUNT_EQUIPMENT_REGISTRY,
     RealmLevel,
 )
+from .spawn_system import (
+    get_all_spawn_origins,
+    get_all_spawn_locations,
+    get_spawn_origin,
+    get_spawn_location,
+    validate_spawn_selection,
+)
 from .cultivation import attempt_breakthrough, perform_cultivate
 from .data_manager import DataManager
 from .auth import AuthManager
@@ -51,6 +58,13 @@ from .models import Player
 from . import market as market_mod
 from . import shop as shop_mod
 from . import sect as sect_mod
+from . import heal_skills
+from . import gathering
+from . import crafting
+from . import trading
+from . import forging
+from . import hunting
+from . import accessories
 
 logger = logging.getLogger("mbwar.engine")
 
@@ -83,6 +97,41 @@ class GameEngine:
         self.dungeon = DungeonManager(self)
         self.pvp = PvPManager(self)
         self.admin_manager = None  # 分级管理员系统
+        self._ui_config: dict = self._default_ui_config()
+    
+    def _default_ui_config(self) -> dict:
+        """默认UI配置"""
+        return {
+            "background_color": "#0D0D0D",
+            "background_gradient_start": "#1A1A1A",
+            "background_gradient_end": "#151515",
+            "header_color": "#1A1A1A",
+            "header_border_color": "#8B0000",
+            "accent_color": "#D4AF37",
+            "text_color": "#F5DEB3",
+            "button_color": "#8B0000",
+            "enabled": False
+        }
+    
+    def get_ui_config(self) -> dict:
+        """获取UI配置"""
+        return self._ui_config.copy()
+    
+    def set_ui_config(self, config: dict, admin_level: int) -> dict:
+        """设置UI配置（需要lv4+）"""
+        from .admin_system import AdminLevel
+        if admin_level < AdminLevel.SUPER_ADMIN:
+            return {"success": False, "message": "权限不足，需要超级管理员或更高"}
+        
+        valid_keys = {
+            "background_color", "background_gradient_start", "background_gradient_end",
+            "header_color", "header_border_color", "accent_color", "text_color", "button_color", "enabled"
+        }
+        for key, value in config.items():
+            if key in valid_keys:
+                self._ui_config[key] = value
+        
+        return {"success": True, "message": "UI配置已更新", "config": self._ui_config}
 
     async def initialize(self):
         """加载所有玩家数据到内存。"""
@@ -223,25 +272,46 @@ class GameEngine:
             changed = True
         return changed
 
-    async def get_or_create_player(self, user_id: str, name: str) -> Player:
+    async def get_or_create_player(self, user_id: str, name: str, spawn_origin: str = "", spawn_location: str = "") -> Player:
         """获取或创建玩家。"""
         if user_id in self._players:
             return self._players[user_id]
+        
         start_realm = get_nearest_realm_level(RealmLevel.MORTAL)
         realm_cfg = REALM_CONFIG.get(start_realm, {})
+        
+        origin = get_spawn_origin(spawn_origin) if spawn_origin else None
+        location = get_spawn_location(spawn_location) if spawn_location else None
+        
+        base_hp = realm_cfg["base_hp"]
+        base_attack = realm_cfg["base_attack"]
+        base_defense = realm_cfg["base_defense"]
+        base_lingqi = realm_cfg.get("base_lingqi", 50)
+        
         player = Player(
             user_id=user_id,
             name=name,
             realm=start_realm,
-            hp=realm_cfg["base_hp"],
-            max_hp=realm_cfg["base_hp"],
-            attack=realm_cfg["base_attack"],
-            defense=realm_cfg["base_defense"],
-            lingqi=realm_cfg.get("base_lingqi", 50),
+            hp=base_hp,
+            max_hp=base_hp,
+            attack=base_attack,
+            defense=base_defense,
+            lingqi=base_lingqi,
+            spawn_origin=spawn_origin,
+            spawn_location=spawn_location,
         )
-        # 新玩家赠送一些物品
-        player.inventory["healing_pill"] = 3
-        player.inventory["exp_pill"] = 1
+        
+        if location:
+            player.map_state.current_location = location.location_id
+            player.map_state.x = location.x
+            player.map_state.y = location.y
+        else:
+            player.map_state.x = 500.0
+            player.map_state.y = 500.0
+        
+        player.inventory["healing_pill"] = player.inventory.get("healing_pill", 0) + 3
+        player.inventory["exp_pill"] = player.inventory.get("exp_pill", 0) + 1
+        
         self._players[user_id] = player
         self._name_index[name] = user_id
         await self._save_player(player)
@@ -250,6 +320,49 @@ class GameEngine:
     async def get_player(self, user_id: str) -> Optional[Player]:
         """获取玩家，不存在返回 None。"""
         return self._players.get(user_id)
+
+    async def _auto_update_task_progress(self, user_id: str, task_type: str, count: int = 1) -> list[dict]:
+        """自动更新任务进度。返回完成的任务列表。"""
+        completed = []
+        membership = await self._data_manager.load_player_sect(user_id)
+        if not membership:
+            return completed
+
+        tasks = await self._data_manager.get_sect_tasks(membership["sect_id"], "active")
+        for task in tasks:
+            if task["task_type"] != task_type:
+                continue
+            if task.get("is_expired"):
+                continue
+
+            member_task = await self._data_manager.get_task_member(task["task_id"], user_id)
+            if not member_task or member_task["status"] == "completed":
+                continue
+
+            new_progress = min(member_task["progress"] + count, task["target_count"])
+            await self._data_manager.update_task_member_progress(task["task_id"], user_id, new_progress)
+
+            if new_progress >= task["target_count"]:
+                await self._data_manager.complete_task_member(task["task_id"], user_id)
+                await self._data_manager.update_task_progress(task["task_id"], new_progress)
+
+                reward_points = task["reward_points"]
+                if reward_points > 0:
+                    await self._data_manager.update_member_contribution(user_id, reward_points)
+
+                if task["reward_item_id"] and task["reward_item_count"] > 0:
+                    player = await self.get_player(user_id)
+                    if player:
+                        from .inventory import add_item
+                        await add_item(player, task["reward_item_id"], task["reward_item_count"])
+
+                completed.append({
+                    "task_id": task["task_id"],
+                    "title": task["title"],
+                    "reward_points": reward_points,
+                })
+
+        return completed
 
     async def cultivate(self, user_id: str) -> dict:
         """训练操作。"""
@@ -267,6 +380,11 @@ class GameEngine:
         result = await perform_cultivate(player, self._cultivate_cooldown)
         if result["success"]:
             await self._save_player(player)
+            completed_tasks = await self._auto_update_task_progress(user_id, "cultivate")
+            if completed_tasks:
+                task_names = "、".join([t["title"] for t in completed_tasks])
+                result["task_completed"] = completed_tasks
+                result["message"] = result.get("message", "") + f" 完成家族任务：{task_names}"
         return result
 
     async def daily_checkin(self, user_id: str) -> dict:
@@ -732,6 +850,62 @@ class GameEngine:
         if not ok:
             return {"success": False, "message": "公告不存在"}
         return {"success": True, "message": "公告已删除"}
+
+    # ── 关于页面 ──────────────────────────────────────────────
+
+    async def get_about_page(self) -> dict:
+        """获取关于页面内容（公开接口）"""
+        return await self._data_manager.get_about_page()
+
+    async def admin_update_about_page(self, acknowledgements: str, rules: str) -> dict:
+        """更新关于页面内容"""
+        ok = await self._data_manager.admin_update_about_page(acknowledgements, rules)
+        if not ok:
+            return {"success": False, "message": "更新失败"}
+        return {"success": True, "message": "关于页面已更新"}
+
+    # ── 数据库维护 ───────────────────────────────────────────
+
+    async def admin_db_health_check(self) -> dict:
+        """管理员接口：数据库健康检查"""
+        return await self._data_manager.db_health_check()
+
+    async def admin_db_vacuum(self) -> dict:
+        """管理员接口：数据库优化（VACUUM）"""
+        return await self._data_manager.db_vacuum()
+
+    async def admin_db_backup(self, backup_path: str) -> dict:
+        """管理员接口：数据库备份"""
+        return await self._data_manager.db_backup(backup_path)
+
+    async def admin_get_table_info(self) -> list[dict]:
+        """管理员接口：获取所有表的信息"""
+        return await self._data_manager.get_table_info()
+
+    # ── 音效系统 ───────────────────────────────────────────
+
+    async def get_audio_config(self) -> dict:
+        """获取音效配置"""
+        return await self._data_manager.get_audio_config()
+
+    async def update_audio_settings(
+        self,
+        enabled: bool = None,
+        music_enabled: bool = None,
+        sound_volume: float = None,
+        music_volume: float = None,
+    ) -> dict:
+        """更新玩家音效设置"""
+        return await self._data_manager.update_audio_config(
+            enabled=enabled,
+            music_enabled=music_enabled,
+            sound_volume=sound_volume,
+            music_volume=music_volume,
+        )
+
+    async def admin_update_audio_files(self, audio_type: str, file_path: str) -> dict:
+        """管理员更新音效文件"""
+        return await self._data_manager.admin_update_audio_files(audio_type, file_path)
 
     async def admin_list_heart_methods(self) -> list[dict]:
         rows = await self._data_manager.admin_list_heart_methods()
@@ -2128,8 +2302,8 @@ class GameEngine:
                         slot=eq.slot,
                     ))
 
-            # 已装备的所有装备
-            equip_slots = ["weapon", "head", "body", "hands", "legs", "shoulders", "accessory1", "accessory2"]
+            # 已装备的所有装备（武器已在上面单独处理）
+            equip_slots = ["head", "body", "hands", "legs", "shoulders", "accessory1", "accessory2"]
             for slot in equip_slots:
                 equip_id = getattr(player, slot, "无")
                 if equip_id and equip_id != "无":
@@ -2279,6 +2453,139 @@ class GameEngine:
         self._name_index.clear()
         await self._data_manager.clear_all_data(remove_dir=remove_dir)
 
+    # ==================== 出身选择相关 ====================
+
+    def _apply_origin_bonuses(self, player: Player, origin) -> dict:
+        """统一发放出身奖励（属性+物品+装备+技能+第纳尔）。"""
+        reward_details = {
+            "attributes": [],
+            "combat_stats": [],
+            "items": [],
+            "equipment": [],
+            "skills": [],
+            "spirit_stones": 0,
+        }
+
+        # 发放属性点
+        player.strength += origin.bonus_strength
+        player.agility += origin.bonus_agility
+        player.intelligence += origin.bonus_intelligence
+        if origin.bonus_strength:
+            reward_details["attributes"].append(f"力量+{origin.bonus_strength}")
+        if origin.bonus_agility:
+            reward_details["attributes"].append(f"敏捷+{origin.bonus_agility}")
+        if origin.bonus_intelligence:
+            reward_details["attributes"].append(f"智力+{origin.bonus_intelligence}")
+
+        # 发放战斗属性
+        player.hp += origin.bonus_hp
+        player.max_hp += origin.bonus_hp
+        player.attack += origin.bonus_attack
+        player.defense += origin.bonus_defense
+        player.lingqi += origin.bonus_lingqi
+        player.spirit_stones += origin.bonus_spirit_stones
+        if origin.bonus_hp:
+            reward_details["combat_stats"].append(f"HP+{origin.bonus_hp}")
+        if origin.bonus_attack:
+            reward_details["combat_stats"].append(f"攻击+{origin.bonus_attack}")
+        if origin.bonus_defense:
+            reward_details["combat_stats"].append(f"防御+{origin.bonus_defense}")
+        if origin.bonus_lingqi:
+            reward_details["combat_stats"].append(f"体力+{origin.bonus_lingqi}")
+        if origin.bonus_spirit_stones:
+            reward_details["spirit_stones"] = origin.bonus_spirit_stones
+            reward_details["combat_stats"].append(f"第纳尔+{origin.bonus_spirit_stones}")
+
+        # 发放物品并自动穿戴装备
+        for item_id, count in origin.bonus_items.items():
+            player.inventory[item_id] = player.inventory.get(item_id, 0) + count
+            eq = EQUIPMENT_REGISTRY.get(item_id)
+            if eq and count > 0:
+                current = getattr(player, eq.slot, "无")
+                if current == "无":
+                    setattr(player, eq.slot, item_id)
+                    player.inventory[item_id] -= 1
+                    if player.inventory[item_id] <= 0:
+                        del player.inventory[item_id]
+                    reward_details["equipment"].append(f"{eq.name}（已装备）")
+                else:
+                    reward_details["items"].append(f"{eq.name} x{count}")
+            else:
+                item_def = ITEM_REGISTRY.get(item_id)
+                item_name = item_def.name if item_def else item_id
+                reward_details["items"].append(f"{item_name} x{count}")
+
+        # 发放技能
+        for skill_id, level in (origin.bonus_skills or {}).items():
+            player.skills = player.skills or {}
+            player.skills[skill_id] = player.skills.get(skill_id, 0) + level
+            reward_details["skills"].append(f"{skill_id} +{level}")
+
+        return reward_details
+
+    async def set_spawn_origin(self, user_id: str, spawn_origin: str, spawn_location: str) -> dict:
+        """设置玩家出身和出生地点（一次性）。"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "角色不存在"}
+        
+        if player.spawn_origin:
+            return {"success": False, "message": "您已选择过出身，无法更改"}
+        
+        if spawn_origin:
+            valid, msg = validate_spawn_selection(spawn_origin, spawn_location)
+            if not valid:
+                return {"success": False, "message": msg}
+            
+            origin = get_spawn_origin(spawn_origin)
+            location = get_spawn_location(spawn_location)
+            
+            player.spawn_origin = spawn_origin
+            player.spawn_location = spawn_location
+            
+            logger.info(f"[set_spawn_origin] 玩家 {player.name} 选择出身 {spawn_origin}，开始发放奖励...")
+            
+            reward_details = {
+                "attributes": [],
+                "combat_stats": [],
+                "items": [],
+                "equipment": [],
+                "skills": [],
+                "spirit_stones": 0,
+            }
+            
+            if origin:
+                reward_details = self._apply_origin_bonuses(player, origin)
+                logger.info(f"[set_spawn_origin] 属性点: 力量+{origin.bonus_strength}, 敏捷+{origin.bonus_agility}, 智力+{origin.bonus_intelligence}")
+                logger.info(f"[set_spawn_origin] 战斗属性: HP+{origin.bonus_hp}, 攻击+{origin.bonus_attack}, 防御+{origin.bonus_defense}, 体力+{origin.bonus_lingqi}, 第纳尔+{origin.bonus_spirit_stones}")
+            
+            if location:
+                player.map_state.current_location = location.location_id
+                player.map_state.x = location.x
+                player.map_state.y = location.y
+                logger.info(f"[set_spawn_origin] 设置出生地点: {location.name}")
+        
+        await self._save_player(player)
+        
+        # 构建详细消息
+        lines = [f"🎉 出身选择成功！"]
+        if reward_details["attributes"]:
+            lines.append(f"📊 属性：{', '.join(reward_details['attributes'])}")
+        if reward_details["combat_stats"]:
+            lines.append(f"⚔️ 战斗：{', '.join(reward_details['combat_stats'])}")
+        if reward_details["equipment"]:
+            lines.append(f"🛡️ 装备：{', '.join(reward_details['equipment'])}")
+        if reward_details["items"]:
+            lines.append(f"🎒 物品：{', '.join(reward_details['items'])}")
+        if reward_details["skills"]:
+            lines.append(f"✨ 技能：{', '.join(reward_details['skills'])}")
+        
+        return {
+            "success": True,
+            "message": "\n".join(lines),
+            "rewards": reward_details,
+        }
+
     # ==================== 认证相关 ====================
 
     def get_player_by_name(self, name: str) -> Optional[Player]:
@@ -2308,11 +2615,11 @@ class GameEngine:
         """本地敏感词兜底检测。"""
         # 基础字符校验：只允许中文、英文、数字、部分符号，长度1-12
         if not re.match(r'^[\u4e00-\u9fa5a-zA-Z0-9_·\-]{1,12}$', name or ""):
-            return False, "骑士名仅允许中文、英文、数字，长度1-12"
+            return False, "角色名仅允许中文、英文、数字，长度1-12"
         normalized = re.sub(r"[\s·•・_\-]", "", str(name or "")).lower()
         for kw in _BAD_NAME_KEYWORDS:
             if kw and kw in normalized:
-                return False, "骑士名包含违规词汇"
+                return False, "角色名包含违规词汇"
         return True, ""
 
     async def _review_registration_name(self, name: str) -> tuple[bool, str]:
@@ -2326,7 +2633,14 @@ class GameEngine:
             return True, ""
 
         try:
-            review = await self._name_reviewer(name)
+            import asyncio
+            review = await asyncio.wait_for(
+                self._name_reviewer(name),
+                timeout=5.0  # AI审核超时5秒
+            )
+        except asyncio.TimeoutError:
+            # 审核超时，放行避免阻塞注册
+            return True, ""
         except Exception:
             # 审核服务异常时放行，避免误伤正常注册
             return True, ""
@@ -2347,34 +2661,40 @@ class GameEngine:
 
         if allow:
             return True, ""
-        return False, ai_reason or "骑士名包含不当内容"
+        return False, ai_reason or "角色名包含不当内容"
 
-    async def register_with_password(self, name: str, password: str) -> dict:
-        """Web 端注册：创建角色并设置密码。"""
+    async def register_with_password(self, name: str, password: str, spawn_origin: str = "", spawn_location: str = "") -> dict:
+        """Web 端注册：创建角色并设置密码。可选出身和出生地点。"""
         name = name.strip()
         if not name:
-            return {"success": False, "message": "骑士名不能为空"}
-        # 仅允许中文汉字（基础区+扩展A），禁止中文标点和其他特殊字符
-        if not re.fullmatch(r"[\u3400-\u4DBF\u4E00-\u9FFF]{2,12}", name):
-            return {"success": False, "message": "骑士名仅支持2-12位中文汉字"}
+            return {"success": False, "message": "角色名不能为空"}
+        if not re.fullmatch(r"[\u4e00-\u9fa5a-zA-Z0-9]{2,12}", name):
+            return {"success": False, "message": "角色名仅支持2-12位中英文、数字"}
 
         ok, reason = await self._review_registration_name(name)
         if not ok:
             return {"success": False, "message": reason}
 
         if self.is_name_taken(name):
-            return {"success": False, "message": f"骑士名「{name}」已被使用"}
+            return {"success": False, "message": f"角色名「{name}」已被使用"}
         if not re.fullmatch(r"\d{4,32}", password or ""):
             return {"success": False, "message": "密码仅支持数字，长度4-32位"}
 
-        # 生成 user_id
+        if spawn_origin or spawn_location:
+            valid, msg = validate_spawn_selection(spawn_origin, spawn_location)
+            if not valid:
+                return {"success": False, "message": msg}
+
         import secrets as _s
         user_id = "u_" + _s.token_hex(8)
 
-        player = await self.get_or_create_player(user_id, name)
+        player = await self.get_or_create_player(user_id, name, spawn_origin, spawn_location)
         player.password_hash = AuthManager.hash_password(password)
         await self._save_player(player)
-        return {"success": True, "user_id": user_id, "message": f"注册成功，欢迎{name}"}
+        
+        origin_name = spawn_origin or "平民"
+        location_name = spawn_location or "中央平原"
+        return {"success": True, "user_id": user_id, "message": f"注册成功，欢迎{origin_name}出身的{name}"}
 
     async def set_password(self, user_id: str, password: str) -> dict:
         """为已有角色设置密码。"""
@@ -2450,6 +2770,83 @@ class GameEngine:
             await self._data_manager.delete_player(uid)
         return {"success": True, "message": f"已删除 {deleted} 名玩家", "deleted": deleted}
 
+    async def reset_player(self, user_id: str) -> dict:
+        """重置玩家角色数据到初始状态（重新选择出身）。"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+
+        player.spawn_origin = ""
+        player.spawn_location = ""
+        player.realm = RealmLevel.MORTAL
+        player.sub_realm = 0
+        player.exp = 0
+        player.hp = 100
+        player.max_hp = 100
+        player.attack = 10
+        player.defense = 5
+        player.spirit_stones = 0
+        player.lingqi = 50
+        player.strength = 5
+        player.agility = 5
+        player.intelligence = 5
+        player.skill_points = 0
+        player.attribute_points = 0
+        player.skills = {}
+        player.permanent_max_hp_bonus = 0
+        player.permanent_attack_bonus = 0
+        player.permanent_defense_bonus = 0
+        player.permanent_lingqi_bonus = 0
+        player.heart_method = "无"
+        player.weapon = "无"
+        player.gongfa_1 = "无"
+        player.gongfa_2 = "无"
+        player.gongfa_3 = "无"
+        player.head = "无"
+        player.body = "无"
+        player.hands = "无"
+        player.legs = "无"
+        player.shoulders = "无"
+        player.accessory1 = "无"
+        player.accessory2 = "无"
+        player.mount = "无"
+        player.mount_armor = "无"
+        player.mount_weapon = "无"
+        player.horse_armament = "无"
+        player.dao_yun = 0
+        player.breakthrough_bonus = 0.0
+        player.breakthrough_pill_count = 0
+        player.heart_method_mastery = 0
+        player.heart_method_exp = 0
+        player.heart_method_value = 0
+        player.gongfa_1_mastery = 0
+        player.gongfa_1_exp = 0
+        player.gongfa_2_mastery = 0
+        player.gongfa_2_exp = 0
+        player.gongfa_3_mastery = 0
+        player.gongfa_3_exp = 0
+        player.inventory = {}
+        player.inventory["healing_pill"] = 3
+        player.inventory["exp_pill"] = 1
+        player.stored_heart_methods = {}
+        player.last_cultivate_time = 0.0
+        player.last_checkin_date = None
+        player.afk_cultivate_start = 0.0
+        player.afk_cultivate_end = 0.0
+        player.last_adventure_time = 0.0
+        player.death_count = 0
+        player.active_buffs = []
+        player.map_state = PlayerMapState()
+        player.active_quests = []
+        player.level = 1
+        player.unallocated_points = 0
+        player.bandit_stats = {}
+        player.is_injured = False
+        player.injured_until = 0.0
+
+        await self._save_player(player)
+        return {"success": True, "message": "角色已重置，请重新选择出身"}
+
     async def update_player_data(self, user_id: str, updates: dict) -> dict:
         """管理员修改玩家数据。"""
         player = self._players.get(user_id)
@@ -2466,7 +2863,7 @@ class GameEngine:
                 if not new_name:
                     continue
                 if new_name != player.name and self.is_name_taken(new_name):
-                    return {"success": False, "message": f"骑士名「{new_name}」已被使用"}
+                    return {"success": False, "message": f"角色名「{new_name}」已被使用"}
                 self._name_index.pop(player.name, None)
                 player.name = new_name
                 self._name_index[new_name] = user_id
@@ -2873,6 +3270,45 @@ class GameEngine:
             await self._notify_player_update(player)
             return result
 
+    # ── 铁匠铺系统 ─────────────────────────────────────────
+
+    async def get_item_prefix_info(self, user_id: str, item_id: str) -> dict:
+        """获取装备前缀信息"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        return await shop_mod.get_item_prefix_info(player, item_id)
+
+    async def blacksmith_repair_prefix(self, user_id: str, item_id: str) -> dict:
+        """铁匠铺修复装备前缀"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+        
+        snapshot = self._snapshot_player(player)
+        result = await shop_mod.blacksmith_repair_prefix(snapshot, item_id)
+        
+        if result.get("success"):
+            self._apply_player_snapshot(player, snapshot)
+            await self._notify_player_update(player)
+        
+        return result
+
+    async def blacksmith_enhance_prefix(self, user_id: str, item_id: str, target_quality: str = "good") -> dict:
+        """铁匠铺强化装备前缀"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+        
+        snapshot = self._snapshot_player(player)
+        result = await shop_mod.blacksmith_enhance_prefix(snapshot, item_id, target_quality)
+        
+        if result.get("success"):
+            self._apply_player_snapshot(player, snapshot)
+            await self._notify_player_update(player)
+        
+        return result
+
     # ── 家族系统 ─────────────────────────────────────────
 
     async def sect_create(self, user_id: str, name: str, description: str = "") -> dict:
@@ -3002,3 +3438,1810 @@ class GameEngine:
     async def sect_get_contribution_rules(self, user_id: str) -> dict:
         """获取家族声望规则。"""
         return await sect_mod.get_contribution_rules(user_id, self._data_manager)
+
+    # ── 家族任务 ────────────────────────────────────────────
+
+    async def sect_create_task(
+        self,
+        user_id: str,
+        title: str,
+        description: str,
+        task_type: str,
+        target_count: int,
+        reward_points: int,
+        reward_item_id: str = "",
+        reward_item_count: int = 0,
+        expires_hours: int = 24,
+    ) -> dict:
+        """创建家族任务（仅头人）。"""
+        membership = await self._data_manager.load_player_sect(user_id)
+        if not membership:
+            return {"success": False, "message": "你尚未加入任何家族"}
+
+        if membership["role"] not in ("leader", "elder"):
+            return {"success": False, "message": "只有头人和长老可以发布任务"}
+
+        sect = await self._data_manager.load_sect(membership["sect_id"])
+        if not sect:
+            return {"success": False, "message": "家族不存在"}
+
+        task_id = await self._data_manager.create_sect_task(
+            sect_id=membership["sect_id"],
+            creator_id=user_id,
+            title=title,
+            description=description,
+            task_type=task_type,
+            target_count=target_count,
+            reward_points=reward_points,
+            reward_item_id=reward_item_id,
+            reward_item_count=reward_item_count,
+            expires_hours=expires_hours,
+        )
+
+        if not task_id:
+            return {"success": False, "message": "创建任务失败"}
+
+        return {"success": True, "message": f"任务「{title}」已发布", "task_id": task_id}
+
+    async def sect_get_tasks(self, user_id: str, status: str = "") -> dict:
+        """获取家族任务列表。"""
+        membership = await self._data_manager.load_player_sect(user_id)
+        if not membership:
+            return {"success": False, "message": "你尚未加入任何家族", "tasks": []}
+
+        tasks = await self._data_manager.get_sect_tasks(membership["sect_id"], status)
+        return {"success": True, "tasks": tasks}
+
+    async def sect_accept_task(self, user_id: str, task_id: int) -> dict:
+        """接受家族任务。"""
+        membership = await self._data_manager.load_player_sect(user_id)
+        if not membership:
+            return {"success": False, "message": "你尚未加入任何家族"}
+
+        task = await self._data_manager.get_task_by_id(task_id)
+        if not task:
+            return {"success": False, "message": "任务不存在"}
+
+        if task["sect_id"] != membership["sect_id"]:
+            return {"success": False, "message": "该任务不属于你的家族"}
+
+        if task["status"] != "active":
+            return {"success": False, "message": "任务已结束"}
+
+        if task.get("is_expired"):
+            return {"success": False, "message": "任务已过期"}
+
+        existing = await self._data_manager.get_task_member(task_id, user_id)
+        if existing:
+            return {"success": False, "message": "你已接受过此任务"}
+
+        ok = await self._data_manager.accept_task(task_id, user_id)
+        if not ok:
+            return {"success": False, "message": "接受任务失败"}
+
+        return {"success": True, "message": f"已接受任务「{task['title']}」"}
+
+    async def sect_update_task_progress(self, user_id: str, task_id: int, progress: int) -> dict:
+        """更新任务进度。"""
+        membership = await self._data_manager.load_player_sect(user_id)
+        if not membership:
+            return {"success": False, "message": "你尚未加入任何家族"}
+
+        task = await self._data_manager.get_task_by_id(task_id)
+        if not task:
+            return {"success": False, "message": "任务不存在"}
+
+        member_task = await self._data_manager.get_task_member(task_id, user_id)
+        if not member_task:
+            return {"success": False, "message": "你未接受此任务"}
+
+        if member_task["status"] == "completed":
+            return {"success": False, "message": "任务已完成"}
+
+        new_progress = min(member_task["progress"] + progress, task["target_count"])
+        await self._data_manager.update_task_member_progress(task_id, user_id, new_progress)
+
+        if new_progress >= task["target_count"]:
+            await self._data_manager.complete_task_member(task_id, user_id)
+            await self._data_manager.update_task_progress(task_id, new_progress)
+
+            reward_msg = f" 奖励：{task['reward_points']} 贡献点"
+            if task["reward_item_id"] and task["reward_item_count"] > 0:
+                from .inventory import add_item
+                player = await self.get_player(user_id)
+                if player:
+                    await add_item(player, task["reward_item_id"], task["reward_item_count"])
+                    item_name = task.get("reward_item_name", task["reward_item_id"])
+                    reward_msg = reward_msg + f"、{task['reward_item_count']}个{item_name}"
+
+            return {
+                "success": True,
+                "message": f"任务已完成！{reward_msg}",
+                "completed": True,
+                "reward_points": task["reward_points"],
+            }
+
+        return {
+            "success": True,
+            "message": f"进度：{new_progress}/{task['target_count']}",
+            "completed": False,
+            "progress": new_progress,
+        }
+
+    async def sect_cancel_task(self, user_id: str, task_id: int) -> dict:
+        """取消/删除任务（仅发布者或头人）。"""
+        membership = await self._data_manager.load_player_sect(user_id)
+        if not membership:
+            return {"success": False, "message": "你尚未加入任何家族"}
+
+        task = await self._data_manager.get_task_by_id(task_id)
+        if not task:
+            return {"success": False, "message": "任务不存在"}
+
+        if task["sect_id"] != membership["sect_id"]:
+            return {"success": False, "message": "该任务不属于你的家族"}
+
+        if membership["role"] != "leader" and task["creator_id"] != user_id:
+            return {"success": False, "message": "只有任务发布者和头人可以取消任务"}
+
+        ok = await self._data_manager.delete_sect_task(task_id)
+        if not ok:
+            return {"success": False, "message": "删除任务失败"}
+
+        return {"success": True, "message": f"任务「{task['title']}」已删除"}
+
+    # ── 医疗系统 ──────────────────────────────────────────────
+
+    async def gather_herbs(self, user_id: str) -> dict:
+        """采集草药"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+        
+        result = gathering.gather_herbs(player)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    async def craft_item(self, user_id: str, recipe_id: str) -> dict:
+        """制作物品"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+        
+        result = crafting.craft_item(player, recipe_id)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    async def use_medical_item(self, user_id: str, item_id: str) -> dict:
+        """使用医疗物品"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+        
+        result = crafting.use_medical_item(player, item_id)
+        if result["success"]:
+            await self._save_player(player)
+        return result
+
+    async def use_heal_skill(self, user_id: str, skill_id: str) -> dict:
+        """使用医疗技能"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色，请先创建"}
+        
+        result = heal_skills.use_heal_skill(player, skill_id)
+        if result.get("success"):
+            await self._save_player(player)
+        return result
+
+    def get_gather_info(self, user_id: str) -> dict:
+        """获取采集信息"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        return gathering.get_gather_info(player)
+
+    def get_medical_info(self, user_id: str) -> dict:
+        """获取医疗系统信息"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        first_aid_level = player.skills.get(30, 0)
+        surgery_level = player.skills.get(32, 0)
+        herbalism_level = player.skills.get(31, 0)
+        
+        return {
+            "success": True,
+            "first_aid_level": first_aid_level,
+            "surgery_level": surgery_level,
+            "herbalism_level": herbalism_level,
+            "gather_info": gathering.get_gather_info(player),
+            "recipes": crafting.get_available_recipes(herbalism_level),
+            "inventory": player.inventory if hasattr(player, 'inventory') else {},
+        }
+
+    # ── 跑商系统 ──────────────────────────────────────────────
+
+    async def trade_buy(self, user_id: str, good_id: str, count: int = 1, location_id: str = None) -> dict:
+        """购买商品"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            return {"success": False, "message": "无法获取位置信息"}
+        
+        loc = location_id or player.map_state.current_location
+        if not loc:
+            return {"success": False, "message": "你不在任何城镇或村庄"}
+        
+        result = trading.buy_good(player, loc, good_id, count)
+        if result.get("success"):
+            await self._save_player(player)
+        return result
+
+    async def trade_sell(self, user_id: str, good_id: str, count: int = 1, location_id: str = None) -> dict:
+        """出售商品"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            return {"success": False, "message": "无法获取位置信息"}
+        
+        loc = location_id or player.map_state.current_location
+        if not loc:
+            return {"success": False, "message": "你不在任何城镇或村庄"}
+        
+        result = trading.sell_good(player, loc, good_id, count)
+        if result.get("success"):
+            await self._save_player(player)
+        return result
+
+    def get_trade_list(self, user_id: str, location_id: str = None, is_buying: bool = True) -> dict:
+        """获取商品列表"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            return {"success": False, "message": "无法获取位置信息"}
+        
+        loc = location_id or player.map_state.current_location
+        if not loc:
+            return {"success": False, "message": "你不在任何城镇或村庄"}
+        
+        goods_list = trading.get_location_goods(loc, is_buying)
+        return {
+            "success": True,
+            "location_id": loc,
+            "is_buying": is_buying,
+            "goods": goods_list,
+        }
+
+    def get_trade_inventory(self, user_id: str) -> dict:
+        """获取玩家背包商品"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        if not hasattr(player, 'trade_inventory'):
+            return {"success": True, "goods": {}}
+        
+        inventory = player.trade_inventory
+        goods = {}
+        for good_id, count in inventory.goods.items():
+            good = trading.get_good(good_id)
+            if good:
+                goods[good_id] = {
+                    "name": good.name,
+                    "count": count,
+                }
+        
+        return {"success": True, "goods": goods}
+
+    # ── 锻造系统 ──────────────────────────────────────────────
+
+    async def forge_item(self, user_id: str, recipe_id: str) -> dict:
+        """锻造装备"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        result = forging.forge_item(player, recipe_id)
+        if result.get("success"):
+            await self._save_player(player)
+        return result
+
+    def get_forging_materials(self, user_id: str) -> dict:
+        """获取锻造材料"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        materials = {}
+        if hasattr(player, 'forging_materials'):
+            for mat_id, count in player.forging_materials.items():
+                mat = forging.get_material(mat_id)
+                if mat:
+                    materials[mat_id] = {
+                        "name": mat.name,
+                        "count": count,
+                    }
+        
+        return {"success": True, "materials": materials}
+
+    def get_forging_recipes(self, user_id: str) -> dict:
+        """获取锻造配方"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        skill_level = getattr(player, 'smithing_level', 0)
+        recipes = forging.get_available_recipes(skill_level)
+        
+        recipe_list = []
+        for r in recipes:
+            fuel = forging.get_material(r.fuel_required)
+            metal = forging.get_material(r.metal_required)
+            acc = forging.get_material(r.accessory_required) if r.accessory_required else None
+            
+            recipe_list.append({
+                "recipe_id": r.recipe_id,
+                "name": r.name,
+                "result": r.result_item_id,
+                "fuel": fuel.name if fuel else r.fuel_required,
+                "metal": metal.name if metal else r.metal_required,
+                "accessory": acc.name if acc else "",
+                "skill_req": r.skill_level_req,
+            })
+        
+        return {"success": True, "recipes": recipe_list, "skill_level": skill_level}
+
+    async def buy_forging_material(self, user_id: str, material_id: str, count: int = 1) -> dict:
+        """购买锻造材料"""
+        from .map_system import TOWNS, VILLAGES
+        
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        if not hasattr(player, 'map_state') or not player.map_state:
+            return {"success": False, "message": "无法获取位置信息"}
+        
+        loc = player.map_state.current_location
+        if not loc:
+            return {"success": False, "message": "你不在任何城镇"}
+        
+        can_buy = False
+        if loc in TOWNS and TOWNS[loc].has_blacksmith:
+            can_buy = True
+        elif loc in VILLAGES and VILLAGES[loc].has_blacksmith:
+            can_buy = True
+        
+        if not can_buy:
+            return {"success": False, "message": "你不在有铁匠铺的城镇或村庄"}
+        
+        shop_mats = forging.get_shop_materials(loc)
+        shop_mat = None
+        for m in shop_mats:
+            if m["material_id"] == material_id:
+                shop_mat = m
+                break
+        
+        if not shop_mat:
+            return {"success": False, "message": "该城镇不出售此材料"}
+        
+        total_cost = shop_mat["price"] * count
+        
+        if player.spirit_stones < total_cost:
+            return {"success": False, "message": f"第纳尔不足，需要{total_cost}第纳尔"}
+        
+        player.spirit_stones -= total_cost
+        forging.add_material(player, material_id, count)
+        
+        await self._save_player(player)
+        
+        return {
+            "success": True,
+            "message": f"购买了{count}个{shop_mat['name']}，花费{total_cost}第纳尔",
+            "cost": total_cost,
+        }
+
+    # ── 狩猎系统 ──────────────────────────────────────────────
+
+    def get_hunting_info(self, user_id: str) -> dict:
+        """获取狩猎信息"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        return {
+            "success": True,
+            "materials": accessories.format_hunting_materials(player),
+        }
+
+    async def hunt_wildlife(self, user_id: str, wildlife_id: str = None) -> dict:
+        """狩猎野生动物"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        # 随机选择一只野生动物
+        import random
+        wildlife_list = list(hunting.WILDLIFE.values())
+        wildlife = random.choice(wildlife_list)
+        
+        # 模拟战斗胜利
+        exp_reward = wildlife.exp_reward
+        gold_reward = wildlife.gold_reward
+        
+        # 计算掉落
+        drops = hunting.calculate_hunt_drops(wildlife)
+        
+        # 添加经验和金币
+        player.exp = getattr(player, 'exp', 0) + exp_reward
+        player.spirit_stones = getattr(player, 'spirit_stones', 0) + gold_reward
+        
+        # 添加掉落物品
+        if not hasattr(player, 'hunting_materials'):
+            player.hunting_materials = {}
+        
+        drop_texts = []
+        for item_id, count in drops.items():
+            player.hunting_materials[item_id] = player.hunting_materials.get(item_id, 0) + count
+            item_info = hunting.HUNT_DROPS.get(item_id, {})
+            drop_texts.append(f"{item_info.get('name', item_id)}x{count}")
+        
+        await self._save_player(player)
+        
+        drops_str = "、" .join(drop_texts) if drop_texts else "无"
+        
+        return {
+            "success": True,
+            "message": f"你猎杀了{wildlife.name}！获得经验{exp_reward}，金币{gold_reward}，掉落: {drops_str}",
+            "exp": exp_reward,
+            "gold": gold_reward,
+            "drops": drops,
+        }
+
+    # ── 饰品制作系统 ──────────────────────────────────────────────
+
+    async def craft_accessory(self, user_id: str, accessory_id: str) -> dict:
+        """制作饰品"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        result = accessories.craft_accessory(player, accessory_id)
+        if result.get("success"):
+            await self._save_player(player)
+        return result
+
+    def get_accessory_recipes(self, user_id: str) -> dict:
+        """获取饰品配方"""
+        player = self._players.get(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+        
+        return {
+            "success": True,
+            "recipes": accessories.format_accessory_recipes(player),
+        }
+
+    # ── 地点与NPC系统 ──────────────────────────────────────────────
+
+    async def enter_location(self, user_id: str, location_id: str) -> dict:
+        """进入城镇或村庄"""
+        from .map_system import ALL_LOCATIONS, LocationType, arrive_at_location
+        from .npc_system import get_npcs_for_location, get_dialog_for_npc, get_favor_level, FAVOR_LEVELS
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(location_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        async with self._get_player_lock(user_id):
+            result = arrive_at_location(player.map_state, location_id)
+            if not result.get("success"):
+                return result
+            await self._save_player(player)
+
+        npcs = get_npcs_for_location(location_id)
+        npc_data = []
+        from .npc_system import get_npc_favor_state, _npc_favor_states
+        for npc in npcs:
+            favor_state = get_npc_favor_state(_npc_favor_states, user_id, npc.npc_id)
+            npc_data.append({
+                "npc_id": npc.npc_id,
+                "name": npc.name,
+                "title": npc.title,
+                "icon": npc.icon,
+                "description": npc.description,
+                "npc_type": npc.npc_type,
+                "favor": favor_state.favor,
+                "favor_level": get_favor_level(favor_state.favor),
+                "total_gifts_given": favor_state.total_gifts_given,
+            })
+
+        loc_type_name = LocationType(int(loc.location_type)).name
+        from .map_system import get_location_icon
+        loc_icon = get_location_icon(int(loc.location_type))
+
+        return {
+            "success": True,
+            "message": f"你进入了{loc.name}",
+            "location": {
+                "location_id": loc.location_id,
+                "name": loc.name,
+                "type": loc_type_name,
+                "icon": loc_icon,
+                "description": loc.description,
+                "faction": loc.faction,
+                "has_blacksmith": getattr(loc, 'has_blacksmith', False),
+            },
+            "npcs": npc_data,
+        }
+
+    async def get_town_menu(self, user_id: str, location_id: str) -> dict:
+        """获取城镇菜单（骑砍风格设施列表）。"""
+        from .map_system import ALL_LOCATIONS, LocationType
+        from .npc_system import get_npcs_for_location
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(location_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        loc_type = int(loc.location_type)
+        npcs = get_npcs_for_location(location_id)
+        npc_by_type = {}
+        for npc in npcs:
+            npc_by_type[npc.npc_type] = npc
+
+        menu_items = []
+
+        if loc_type == LocationType.TOWN:
+            tavern_npc = npc_by_type.get("tavern_keeper")
+            menu_items.append({
+                "id": "tavern",
+                "name": "酒馆",
+                "icon": "🍺",
+                "description": "休息、打听消息",
+                "available": bool(tavern_npc),
+                "npc_id": tavern_npc.npc_id if tavern_npc else None,
+                "npc_name": tavern_npc.name if tavern_npc else None,
+            })
+            menu_items.append({
+                "id": "arena",
+                "name": "竞技场",
+                "icon": "🏟️",
+                "description": "参加比武大赛",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+            merchant_npc = npc_by_type.get("merchant")
+            menu_items.append({
+                "id": "shop",
+                "name": "商店",
+                "icon": "🏪",
+                "description": "买卖商品",
+                "available": bool(merchant_npc),
+                "npc_id": merchant_npc.npc_id if merchant_npc else None,
+                "npc_name": merchant_npc.name if merchant_npc else None,
+            })
+            blacksmith_npc = npc_by_type.get("blacksmith")
+            menu_items.append({
+                "id": "blacksmith",
+                "name": "铁匠铺",
+                "icon": "🔨",
+                "description": "修理、强化装备",
+                "available": bool(blacksmith_npc),
+                "npc_id": blacksmith_npc.npc_id if blacksmith_npc else None,
+                "npc_name": blacksmith_npc.name if blacksmith_npc else None,
+            })
+            mayor_npc = npc_by_type.get("mayor")
+            menu_items.append({
+                "id": "castle",
+                "name": "城堡",
+                "icon": "🏰",
+                "description": "与城镇长对话、接取任务",
+                "available": bool(mayor_npc),
+                "npc_id": mayor_npc.npc_id if mayor_npc else None,
+                "npc_name": mayor_npc.name if mayor_npc else None,
+            })
+            menu_items.append({
+                "id": "quests",
+                "name": "任务板",
+                "icon": "📋",
+                "description": "查看可接任务",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+
+        elif loc_type == LocationType.VILLAGE:
+            elder_npc = npc_by_type.get("village_elder")
+            menu_items.append({
+                "id": "elder",
+                "name": "村长家",
+                "icon": "👴",
+                "description": "与村长对话、接取任务",
+                "available": bool(elder_npc),
+                "npc_id": elder_npc.npc_id if elder_npc else None,
+                "npc_name": elder_npc.name if elder_npc else None,
+            })
+            menu_items.append({
+                "id": "industry",
+                "name": "产业管理",
+                "icon": "🏗️",
+                "description": "建造和管理村庄产业",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+            menu_items.append({
+                "id": "quests",
+                "name": "委托",
+                "icon": "📋",
+                "description": "查看村庄委托",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+            menu_items.append({
+                "id": "rest",
+                "name": "借宿",
+                "icon": "🛏️",
+                "description": "在村民家中休息",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+
+        elif loc_type == LocationType.CASTLE:
+            menu_items.append({
+                "id": "castle",
+                "name": "城堡大厅",
+                "icon": "🏰",
+                "description": "城堡内部",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+            menu_items.append({
+                "id": "quests",
+                "name": "任务板",
+                "icon": "📋",
+                "description": "查看可接任务",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+
+        elif loc_type == LocationType.BANDIT_CAMP:
+            menu_items.append({
+                "id": "raid",
+                "name": "清剿匪窝",
+                "icon": "⚔️",
+                "description": "与匪徒战斗",
+                "available": True,
+                "npc_id": None,
+                "npc_name": None,
+            })
+
+        loc_type_name = LocationType(loc_type).name
+        from .map_system import get_location_icon
+        loc_icon = get_location_icon(loc_type)
+
+        faction_names = {
+            0: "斯瓦迪亚王国", 1: "维吉亚王国", 2: "诺德王国",
+            3: "罗多克王国", 4: "库吉特汗国", 5: "萨兰德苏丹国",
+        }
+        faction_name = faction_names.get(getattr(loc, 'faction', -1), "")
+
+        return {
+            "success": True,
+            "location": {
+                "location_id": loc.location_id,
+                "name": loc.name,
+                "type": loc_type_name,
+                "icon": loc_icon,
+                "description": loc.description,
+                "faction_name": faction_name,
+            },
+            "menu_items": menu_items,
+        }
+
+    async def town_menu_action(self, user_id: str, action_id: str, location_id: str, npc_id: str = "") -> dict:
+        """处理城镇菜单项点击。"""
+        from .map_system import ALL_LOCATIONS, LocationType
+        from .npc_system import get_npcs_for_location
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(location_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        loc_type = int(loc.location_type)
+        npcs = get_npcs_for_location(location_id)
+        npc_by_type = {}
+        for npc in npcs:
+            npc_by_type[npc.npc_type] = npc
+
+        if action_id in ("tavern", "castle", "elder", "shop", "blacksmith"):
+            target_npc = None
+            if npc_id:
+                for npc in npcs:
+                    if npc.npc_id == npc_id:
+                        target_npc = npc
+                        break
+            else:
+                type_map = {
+                    "tavern": "tavern_keeper",
+                    "castle": "mayor",
+                    "elder": "village_elder",
+                    "shop": "merchant",
+                    "blacksmith": "blacksmith",
+                }
+                target_npc = npc_by_type.get(type_map.get(action_id, ""))
+
+            if target_npc:
+                return {
+                    "success": True,
+                    "action": "open_npc_dialog",
+                    "npc_id": target_npc.npc_id,
+                    "npc_name": target_npc.name,
+                    "message": f"你走向了{target_npc.name}",
+                }
+            return {"success": False, "message": "该设施暂无NPC"}
+
+        elif action_id == "arena":
+            if loc_type != LocationType.TOWN:
+                return {"success": False, "message": "只有城镇才有竞技场"}
+            return {
+                "success": True,
+                "action": "navigate",
+                "route": "/tournament",
+                "query": {"location_id": location_id},
+                "message": "你来到了竞技场",
+            }
+
+        elif action_id == "shop":
+            merchant = npc_by_type.get("merchant")
+            if merchant:
+                return {
+                    "success": True,
+                    "action": "navigate",
+                    "route": "/trade",
+                    "query": {"location_id": location_id},
+                    "message": "你来到了商店",
+                }
+            return {"success": False, "message": "该地点没有商店"}
+
+        elif action_id == "blacksmith":
+            blacksmith = npc_by_type.get("blacksmith")
+            if blacksmith:
+                return {
+                    "success": True,
+                    "action": "navigate",
+                    "route": "/blacksmith",
+                    "query": {"location_id": location_id},
+                    "message": "你来到了铁匠铺",
+                }
+            return {"success": False, "message": "该地点没有铁匠铺"}
+
+        elif action_id == "rest":
+            return {
+                "success": True,
+                "action": "rest",
+                "message": "你找了一处安静的地方休息",
+            }
+
+        elif action_id == "raid":
+            return {
+                "success": True,
+                "action": "navigate",
+                "route": "/bandits",
+                "query": {"location_id": location_id},
+                "message": "你准备清剿匪窝",
+            }
+
+        elif action_id == "quests":
+            return {
+                "success": True,
+                "action": "show_message",
+                "message": "任务系统开发中...",
+            }
+
+        elif action_id == "industry":
+            return {
+                "success": True,
+                "action": "navigate",
+                "route": "/industry",
+                "query": {"village_id": location_id, "location_id": location_id},
+                "message": "你打开了产业管理",
+            }
+
+        return {"success": False, "message": "未知的菜单操作"}
+
+    async def get_village_industries(self, user_id: str, village_id: str) -> dict:
+        """获取村庄产业状态。"""
+        from .map_system import ALL_LOCATIONS
+        from .industry_system import (
+            INDUSTRIES, get_available_industries, get_industry_status_detail,
+            get_npc_bonus_for_industry, INDUSTRY_MAX_PER_VILLAGE,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(village_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        village_type = getattr(loc, 'village_type', '')
+        village_production = getattr(loc, 'production', '')
+        village_prosperity = getattr(loc, 'prosperity', 0)
+        favor = player.village_favor.get(village_id, 0)
+
+        npc_bonuses = get_npc_bonus_for_industry({}, user_id, village_type)
+        available = get_available_industries(
+            village_id, village_type, village_production,
+            village_prosperity, favor,
+            player.village_industries.get(village_id, {}).get("total_count", 0),
+        )
+        status = get_industry_status_detail(
+            player.village_industries, village_id, npc_bonuses,
+        )
+
+        return {
+            "success": True,
+            "village": {
+                "village_id": village_id,
+                "name": loc.name,
+                "type": village_type,
+                "production": village_production,
+                "prosperity": village_prosperity,
+            },
+            "player_favor": favor,
+            "available_industries": available,
+            "built_industries": status,
+            "npc_bonuses": npc_bonuses,
+        }
+
+    async def build_village_industry(self, user_id: str, village_id: str, industry_id: str) -> dict:
+        """建造村庄产业。"""
+        from .map_system import ALL_LOCATIONS
+        from .industry_system import (
+            INDUSTRIES, build_industry, get_npc_bonus_for_industry,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(village_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        village_type = getattr(loc, 'village_type', '')
+        village_production = getattr(loc, 'production', '')
+        village_prosperity = getattr(loc, 'prosperity', 0)
+        favor = player.village_favor.get(village_id, 0)
+        npc_bonuses = get_npc_bonus_for_industry({}, user_id, village_type)
+
+        async with self._get_player_lock(user_id):
+            result = build_industry(
+                player.village_industries, user_id, village_id, industry_id,
+                village_type, village_production, village_prosperity,
+                favor, player.spirit_stones, npc_bonuses,
+            )
+            if result.get("success"):
+                player.spirit_stones -= result["cost"]
+                await self._save_player(player)
+
+        return result
+
+    async def upgrade_village_industry(self, user_id: str, village_id: str, industry_id: str) -> dict:
+        """升级村庄产业。"""
+        from .map_system import ALL_LOCATIONS
+        from .industry_system import (
+            INDUSTRIES, upgrade_industry, get_npc_bonus_for_industry,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(village_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        village_type = getattr(loc, 'village_type', '')
+        village_production = getattr(loc, 'production', '')
+        village_prosperity = getattr(loc, 'prosperity', 0)
+        favor = player.village_favor.get(village_id, 0)
+        npc_bonuses = get_npc_bonus_for_industry({}, user_id, village_type)
+
+        async with self._get_player_lock(user_id):
+            result = upgrade_industry(
+                player.village_industries, user_id, village_id, industry_id,
+                player.spirit_stones, npc_bonuses,
+            )
+            if result.get("success"):
+                player.spirit_stones -= result["cost"]
+                await self._save_player(player)
+
+        return result
+
+    async def collect_industry_income(self, user_id: str, village_id: str) -> dict:
+        """收取村庄产业产出。"""
+        from .map_system import ALL_LOCATIONS
+        from .industry_system import (
+            collect_industry_income as _collect, get_npc_bonus_for_industry,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(village_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        village_type = getattr(loc, 'village_type', '')
+        village_production = getattr(loc, 'production', '')
+        village_prosperity = getattr(loc, 'prosperity', 0)
+        favor = player.village_favor.get(village_id, 0)
+        npc_bonuses = get_npc_bonus_for_industry({}, user_id, village_type)
+
+        async with self._get_player_lock(user_id):
+            result = _collect(
+                player.village_industries, user_id, village_id, npc_bonuses,
+            )
+            if result.get("success"):
+                player.spirit_stones += result.get("total_income", 0)
+                await self._save_player(player)
+
+        return result
+
+    async def repair_industry_action(self, user_id: str, village_id: str, industry_id: str) -> dict:
+        """修复村庄产业。"""
+        from .map_system import ALL_LOCATIONS
+        from .industry_system import repair_industry
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc = ALL_LOCATIONS.get(village_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        async with self._get_player_lock(user_id):
+            result = repair_industry(
+                player.village_industries, user_id, village_id, industry_id,
+                player.spirit_stones,
+            )
+            if result.get("success"):
+                player.spirit_stones -= result["cost"]
+                await self._save_player(player)
+
+        return result
+
+    async def leave_location(self, user_id: str) -> dict:
+        """离开当前地点，返回大地图"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        if not player.map_state.current_location:
+            return {"success": False, "message": "你不在任何地点"}
+
+        current_loc = player.map_state.current_location
+        player.map_state.current_location = ""
+
+        await self._save_player(player)
+
+        return {
+            "success": True,
+            "message": f"你离开了{current_loc}",
+        }
+
+    async def rest_at_settlement(self, user_id: str) -> dict:
+        """在定居点休息，恢复HP和体力。"""
+        import time
+        from .map_system import ALL_LOCATIONS, LocationType
+        from .npc_system import get_npcs_for_location
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc_id = player.map_state.current_location
+        if not loc_id:
+            return {"success": False, "message": "你不在任何定居点，无法休息"}
+
+        loc = ALL_LOCATIONS.get(loc_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        # 检查是否有酒馆老板NPC
+        npcs = get_npcs_for_location(loc_id)
+        has_tavern = any(n.npc_type == "tavern_keeper" for n in npcs)
+        if not has_tavern:
+            return {"success": False, "message": "这里没有酒馆，无法休息"}
+
+        # 计算休息费用
+        loc_type = int(loc.location_type)
+        if loc_type == 1:  # TOWN
+            cost = 20
+        elif loc_type == 0:  # VILLAGE
+            cost = 10
+        elif loc_type == 2:  # CASTLE
+            cost = 15
+        else:
+            cost = 10
+
+        if player.spirit_stones < cost:
+            return {"success": False, "message": f"第纳尔不足，休息需要{cost}第纳尔"}
+
+        # 冷却检查（5分钟）
+        now = time.time()
+        if player.last_rest_time and (now - player.last_rest_time) < 300:
+            remaining = int(300 - (now - player.last_rest_time))
+            return {"success": False, "message": f"你刚休息过，还需等待{remaining}秒"}
+
+        # 执行休息
+        hp_recovered = player.max_hp - player.hp
+        lingqi_recovered = player.max_lingqi - player.lingqi
+        player.hp = player.max_hp
+        player.lingqi = player.max_lingqi
+        player.spirit_stones -= cost
+        player.last_rest_time = now
+
+        await self._save_player(player)
+
+        msg = f"在{loc.name}的酒馆休息，花费{cost}第纳尔"
+        if hp_recovered > 0:
+            msg += f"，恢复{hp_recovered}点HP"
+        if lingqi_recovered > 0:
+            msg += f"，恢复{lingqi_recovered}点体力"
+        if hp_recovered == 0 and lingqi_recovered == 0:
+            msg += "，状态已满"
+
+        return {
+            "success": True,
+            "message": msg,
+            "cost": cost,
+            "hp_recovered": hp_recovered,
+            "lingqi_recovered": lingqi_recovered,
+        }
+
+    async def heal_troops(self, user_id: str) -> dict:
+        """在定居点进行部队医疗，免费，取决于统御技能等级。"""
+        from .map_system import ALL_LOCATIONS
+        from .npc_system import get_npcs_for_location
+        from .troops import calc_max_troops
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        loc_id = player.map_state.current_location
+        if not loc_id:
+            return {"success": False, "message": "你不在任何定居点，无法进行部队医疗"}
+
+        loc = ALL_LOCATIONS.get(loc_id)
+        if not loc:
+            return {"success": False, "message": "地点不存在"}
+
+        # 获取统御技能等级
+        leadership_level = player.skills.get(33, player.skills.get("33", 0))
+        # 医疗速度 = 1 + 统御等级 * 0.2
+        medical_speed = 1.0 + leadership_level * 0.2
+        # 可恢复的部队数量 = 基础3 + 统御等级 * 2
+        heal_count = 3 + leadership_level * 2
+
+        # 获取当前部队
+        player_troops = await self._data_manager.get_player_troops(user_id)
+        total_troops = sum(player_troops.values())
+
+        if total_troops == 0:
+            return {"success": False, "message": "你没有部队需要医疗"}
+
+        # 计算因军饷不足可能损失的部队，进行补充
+        # 医疗效果：恢复一定比例的部队（模拟逃兵回归）
+        recovered = min(heal_count, total_troops // 2)
+
+        msg = f"在{loc.name}进行部队医疗"
+        msg += f"（统御{leadership_level}级，医疗速度{medical_speed:.1f}x）"
+        msg += f"，可恢复{recovered}名士兵"
+
+        # 如果有实际部队系统，这里可以恢复逃兵
+        # 当前简化版：返回医疗信息
+        return {
+            "success": True,
+            "message": msg,
+            "leadership_level": leadership_level,
+            "medical_speed": round(medical_speed, 1),
+            "heal_count": recovered,
+            "total_troops": total_troops,
+            "max_troops": calc_max_troops(leadership_level),
+        }
+
+    async def start_npc_dialog(self, user_id: str, npc_id: str) -> dict:
+        """开始与NPC对话"""
+        from .npc_system import (
+            get_npcs_for_location, get_dialog_for_npc, get_npc_favor_state,
+            get_favor_level, TOWN_NPCS, VILLAGE_NPCS, _npc_favor_states
+        )
+        from .map_system import ALL_LOCATIONS
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        npc = None
+        location_name = ""
+        all_npcs = list(TOWN_NPCS.values()) + list(VILLAGE_NPCS.values())
+        for n in all_npcs:
+            if n.npc_id == npc_id:
+                npc = n
+                loc_id = n.location_ids[0] if n.location_ids else ""
+                loc = ALL_LOCATIONS.get(loc_id)
+                location_name = loc.name if loc else "未知"
+                break
+
+        if not npc:
+            return {"success": False, "message": "NPC不存在"}
+
+        favor_state = get_npc_favor_state(_npc_favor_states, user_id, npc_id)
+        dialogs = get_dialog_for_npc(npc, location_name, favor_state.favor)
+
+        greeting_node = dialogs.get("greeting")
+        if not greeting_node:
+            return {"success": False, "message": "对话初始化失败"}
+
+        return {
+            "success": True,
+            "npc": {
+                "npc_id": npc.npc_id,
+                "name": npc.name,
+                "title": npc.title,
+                "icon": npc.icon,
+                "description": npc.description,
+                "npc_type": npc.npc_type,
+                "favor": favor_state.favor,
+                "favor_level": get_favor_level(favor_state.favor),
+            },
+            "dialog": {
+                "node_id": greeting_node.node_id,
+                "text": greeting_node.text,
+                "options": [
+                    {
+                        "option_id": opt.option_id,
+                        "text": opt.text,
+                        "next_node": opt.next_node,
+                        "action": opt.action,
+                        "action_data": opt.action_data,
+                    }
+                    for opt in greeting_node.options
+                ],
+            },
+            "all_dialogs": {
+                node_id: {
+                    "node_id": node.node_id,
+                    "text": node.text,
+                    "options": [
+                        {
+                            "option_id": opt.option_id,
+                            "text": opt.text,
+                            "next_node": opt.next_node,
+                            "action": opt.action,
+                            "action_data": opt.action_data,
+                        }
+                        for opt in node.options
+                    ],
+                }
+                for node_id, node in dialogs.items()
+            },
+        }
+
+    async def give_gift(self, user_id: str, npc_id: str, gift_id: str) -> dict:
+        """赠送礼物给NPC"""
+        from .npc_system import give_gift_to_npc, get_npc_favor_state, get_favor_level
+        from .village_system import GIFT_ITEMS
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        gift = GIFT_ITEMS.get(gift_id)
+        if not gift:
+            return {"success": False, "message": "礼物不存在"}
+
+        async with self._get_player_lock(user_id):
+            result = give_gift_to_npc(user_id, npc_id, gift_id, gift.value)
+            if result.get("success"):
+                await self._save_player(player)
+
+        return result
+
+    async def get_gift_list(self, user_id: str) -> dict:
+        """获取所有礼物列表"""
+        from .village_system import GIFT_ITEMS
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        gifts = []
+        for item_id, gift in GIFT_ITEMS.items():
+            gifts.append({
+                "id": item_id,
+                "name": gift.name,
+                "value": gift.value,
+                "can_unlock_legendary": gift.can_unlock_legendary,
+            })
+
+        gifts.sort(key=lambda x: x["value"])
+
+        return {
+            "success": True,
+            "gifts": gifts,
+            "categories": {
+                "common": [1, 30],
+                "medium": [31, 80],
+                "advanced": [81, 150],
+                "rare": [151, 999],
+            }
+        }
+
+    # ══════════════════════════════════════════════════════════════
+    # 同伴系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def get_companions(self, user_id: str) -> dict:
+        """获取同伴列表。"""
+        from .companions import (
+            get_all_companions, get_companion, get_companion_buff,
+            COMPANION_REGISTRY, GIFT_REGISTRY,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        owned = await self._data_manager.get_player_companions(user_id)
+        owned_map = {c["companion_id"]: c for c in owned}
+
+        companions = []
+        for comp_def in get_all_companions():
+            is_owned = comp_def.companion_id in owned_map
+            companion_data = {
+                "companion_id": comp_def.companion_id,
+                "name": comp_def.name,
+                "title": comp_def.title,
+                "recruit_location": comp_def.recruit_location,
+                "recruit_cost": comp_def.recruit_cost,
+                "attack": comp_def.attack,
+                "defense": comp_def.defense,
+                "hp": comp_def.hp,
+                "buff_type": comp_def.buff_type,
+                "buff_value": comp_def.buff_value,
+                "description": comp_def.description,
+                "gift_preferences": comp_def.gift_preferences,
+                "is_owned": is_owned,
+            }
+            if is_owned:
+                oc = owned_map[comp_def.companion_id]
+                companion_data["loyalty"] = oc["loyalty"]
+                companion_data["gifts_given"] = oc["gifts_given"]
+                companion_data["is_active"] = oc["is_active"]
+                buff = get_companion_buff(type("C", (), oc)())
+                companion_data["buff"] = buff
+            companions.append(companion_data)
+
+        return {"success": True, "companions": companions, "gifts": GIFT_REGISTRY}
+
+    async def recruit_companion(self, user_id: str, companion_id: str) -> dict:
+        """招募同伴。"""
+        from .companions import get_companion, calculate_recruit_cost
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        comp_def = get_companion(companion_id)
+        if not comp_def:
+            return {"success": False, "message": "同伴不存在"}
+
+        if await self._data_manager.has_companion(user_id, companion_id):
+            return {"success": False, "message": "你已招募该同伴"}
+
+        cost = calculate_recruit_cost(companion_id)
+        if player.spirit_stones < cost:
+            return {"success": False, "message": f"第纳尔不足，需要{cost}第纳尔"}
+
+        player.spirit_stones -= cost
+        await self._data_manager.add_player_companion(user_id, companion_id)
+        await self._save_player(player)
+
+        return {
+            "success": True,
+            "message": f"成功招募【{comp_def.title}】{comp_def.name}！",
+            "companion": {
+                "name": comp_def.name,
+                "title": comp_def.title,
+                "description": comp_def.description,
+            },
+        }
+
+    async def give_companion_gift(self, user_id: str, companion_id: str, gift_id: str) -> dict:
+        """赠送礼物给同伴提升忠诚度。"""
+        from .companions import get_companion, calculate_gift_loyalty_gain, GIFT_REGISTRY
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        comp_def = get_companion(companion_id)
+        if not comp_def:
+            return {"success": False, "message": "同伴不存在"}
+
+        if not await self._data_manager.has_companion(user_id, companion_id):
+            return {"success": False, "message": "你尚未招募该同伴"}
+
+        gift = GIFT_REGISTRY.get(gift_id)
+        if not gift:
+            return {"success": False, "message": "礼物不存在"}
+
+        if player.spirit_stones < gift["base_price"]:
+            return {"success": False, "message": f"第纳尔不足，需要{gift['base_price']}第纳尔"}
+
+        loyalty_gain = calculate_gift_loyalty_gain(companion_id, gift_id)
+        is_preferred = gift_id in comp_def.gift_preferences
+
+        player.spirit_stones -= gift["base_price"]
+        await self._data_manager.update_companion_loyalty(user_id, companion_id, loyalty_gain, 1)
+        await self._save_player(player)
+
+        msg = f"赠送【{gift['description']}】给{comp_def.name}"
+        if is_preferred:
+            msg += f"（{comp_def.name}非常喜欢！）"
+        msg += f"，忠诚度+{loyalty_gain}"
+
+        return {"success": True, "message": msg, "loyalty_gain": loyalty_gain}
+
+    async def toggle_companion_active(self, user_id: str, companion_id: str, active: bool) -> dict:
+        """切换同伴出战状态。"""
+        from .companions import get_companion
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        comp_def = get_companion(companion_id)
+        if not comp_def:
+            return {"success": False, "message": "同伴不存在"}
+
+        if not await self._data_manager.has_companion(user_id, companion_id):
+            return {"success": False, "message": "你尚未招募该同伴"}
+
+        await self._data_manager.set_companion_active(user_id, companion_id, active)
+        status = "出战" if active else "休息"
+        return {"success": True, "message": f"{comp_def.name}已设为{status}状态"}
+
+    # ══════════════════════════════════════════════════════════════
+    # 部队系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def get_troops(self, user_id: str) -> dict:
+        """获取部队信息。"""
+        from .troops import (
+            get_all_troops, get_troop, calc_total_wage, calc_max_troops,
+            TROOP_REGISTRY, FACTION_NAMES,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        troops = await self._data_manager.get_player_troops(user_id)
+        leadership = player.skills.get("leadership", 0)
+        max_troops = calc_max_troops(leadership)
+        total_count = sum(troops.values())
+        total_wage = calc_total_wage(troops)
+
+        troop_list = []
+        for troop_id, count in troops.items():
+            if count <= 0:
+                continue
+            troop_def = get_troop(troop_id)
+            if troop_def:
+                troop_list.append({
+                    "troop_id": troop_id,
+                    "name": troop_def.name,
+                    "faction": troop_def.faction,
+                    "faction_name": FACTION_NAMES.get(troop_def.faction, troop_def.faction),
+                    "count": count,
+                    "attack": troop_def.attack,
+                    "defense": troop_def.defense,
+                    "hp": troop_def.hp,
+                    "wage": troop_def.wage,
+                    "total_wage": troop_def.wage * count,
+                })
+
+        return {
+            "success": True,
+            "troops": troop_list,
+            "total_count": total_count,
+            "max_troops": max_troops,
+            "total_wage": total_wage,
+            "leadership_level": leadership,
+            "all_troops": [
+                {
+                    "troop_id": t.troop_id,
+                    "name": t.name,
+                    "faction": t.faction,
+                    "faction_name": FACTION_NAMES.get(t.faction, t.faction),
+                    "cost": t.cost,
+                    "wage": t.wage,
+                    "attack": t.attack,
+                    "defense": t.defense,
+                    "hp": t.hp,
+                    "description": t.description,
+                }
+                for t in get_all_troops()
+            ],
+        }
+
+    async def recruit_troops(self, user_id: str, troop_id: str, count: int) -> dict:
+        """招募部队。"""
+        from .troops import get_troop, calc_max_troops
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        troop_def = get_troop(troop_id)
+        if not troop_def:
+            return {"success": False, "message": "兵种不存在"}
+
+        if count <= 0:
+            return {"success": False, "message": "招募数量必须大于0"}
+
+        cost = troop_def.cost * count
+        if player.spirit_stones < cost:
+            return {"success": False, "message": f"第纳尔不足，需要{cost}第纳尔"}
+
+        leadership = player.skills.get("leadership", 0)
+        max_troops = calc_max_troops(leadership)
+        current_count = await self._data_manager.get_total_troop_count(user_id)
+        if current_count + count > max_troops:
+            return {"success": False, "message": f"部队已满，最多{max_troops}人（统御{leadership}级）"}
+
+        player.spirit_stones -= cost
+        await self._data_manager.add_player_troops(user_id, troop_id, count)
+        await self._save_player(player)
+
+        return {
+            "success": True,
+            "message": f"成功招募{count}名{troop_def.name}！",
+            "cost": cost,
+            "count": count,
+        }
+
+    async def dismiss_troops(self, user_id: str, troop_id: str, count: int) -> dict:
+        """解散部队。"""
+        from .troops import get_troop
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        troop_def = get_troop(troop_id)
+        if not troop_def:
+            return {"success": False, "message": "兵种不存在"}
+
+        if count <= 0:
+            return {"success": False, "message": "解散数量必须大于0"}
+
+        actual = await self._data_manager.remove_player_troops(user_id, troop_id, count)
+        if actual <= 0:
+            return {"success": False, "message": "没有该兵种可解散"}
+
+        await self._save_player(player)
+        return {"success": True, "message": f"解散了{actual}名{troop_def.name}", "actual": actual}
+
+    # ══════════════════════════════════════════════════════════════
+    # 竞技场系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def get_tournament(self, user_id: str) -> dict:
+        """获取竞技场信息。"""
+        from .tournament import (
+            get_tournament_opponents, generate_daily_opponents,
+            get_opponent, ENTRY_FEE, WIN_STREAK_REWARDS,
+        )
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        opponents = generate_daily_opponents(player.level)
+        opponent_list = []
+        for opp_id in opponents:
+            opp = get_opponent(opp_id)
+            if opp:
+                opponent_list.append({
+                    "opponent_id": opp.opponent_id,
+                    "name": opp.name,
+                    "title": opp.title,
+                    "level": opp.level,
+                    "attack": opp.attack,
+                    "defense": opp.defense,
+                    "hp": opp.hp,
+                    "reward_gold": opp.reward_gold,
+                    "reward_dao_yun": opp.reward_dao_yun,
+                    "description": opp.description,
+                })
+
+        history = await self._data_manager.get_tournament_history(user_id, limit=10)
+
+        return {
+            "success": True,
+            "opponents": opponent_list,
+            "entry_fee": ENTRY_FEE,
+            "streak_rewards": WIN_STREAK_REWARDS,
+            "history": history,
+        }
+
+    async def start_tournament_battle(self, user_id: str, opponent_id: str) -> dict:
+        """开始竞技场战斗。"""
+        from .tournament import get_opponent, ENTRY_FEE
+        from .combat import CombatState, CombatEngine
+        from .constants import get_equip_bonus, get_heart_method_bonus, get_total_gongfa_bonus
+        from .pills import get_effective_combat_stats
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        opp = get_opponent(opponent_id)
+        if not opp:
+            return {"success": False, "message": "对手不存在"}
+
+        if player.spirit_stones < ENTRY_FEE:
+            return {"success": False, "message": f"报名费不足，需要{ENTRY_FEE}第纳尔"}
+
+        player.spirit_stones -= ENTRY_FEE
+        await self._save_player(player)
+
+        # 计算玩家真实战斗属性
+        effective_stats = get_effective_combat_stats(player)
+        equip_bonus = get_equip_bonus(player)
+        heart_bonus = get_heart_method_bonus(player.heart_method, player.heart_method_mastery)
+        gongfa_bonus = get_total_gongfa_bonus(player)
+        max_lingqi = max(player.lingqi, 50)
+
+        p_atk = max(1, effective_stats["attack"] + equip_bonus["attack"] + heart_bonus["attack_bonus"] + gongfa_bonus["attack_bonus"])
+        p_def = max(1, effective_stats["defense"] + equip_bonus["defense"] + heart_bonus["defense_bonus"] + gongfa_bonus["defense_bonus"])
+
+        state = CombatState(
+            player_hp=effective_stats["hp"],
+            player_max_hp=effective_stats["max_hp"],
+            player_attack=p_atk,
+            player_defense=p_def,
+            player_lingqi=min(effective_stats["lingqi"], max_lingqi),
+            player_max_lingqi=max_lingqi,
+            enemy_name=f"{opp.title}{opp.name}",
+            enemy_type="tournament",
+            enemy_hp=opp.hp,
+            enemy_max_hp=opp.hp,
+            enemy_attack=opp.attack,
+            enemy_defense=opp.defense,
+        )
+
+        # 存储竞技场战斗状态
+        if not hasattr(self, '_tournament_combats'):
+            self._tournament_combats = {}
+        self._tournament_combats[user_id] = {
+            "state": state,
+            "opponent_id": opponent_id,
+            "opponent": opp,
+        }
+
+        return {
+            "success": True,
+            "combat_state": state.to_dict(),
+            "opponent": {
+                "opponent_id": opp.opponent_id,
+                "name": opp.name,
+                "title": opp.title,
+                "level": opp.level,
+                "hp": opp.hp,
+                "attack": opp.attack,
+                "defense": opp.defense,
+                "reward_gold": opp.reward_gold,
+                "reward_dao_yun": opp.reward_dao_yun,
+            },
+        }
+
+    async def tournament_combat_action(self, user_id: str, action: str, data: dict | None = None) -> dict:
+        """处理竞技场战斗动作。"""
+        from .combat import CombatEngine
+
+        if not hasattr(self, '_tournament_combats') or user_id not in self._tournament_combats:
+            return {"success": False, "message": "当前没有进行中的竞技场战斗"}
+
+        battle = self._tournament_combats[user_id]
+        state = battle["state"]
+        player = await self.get_player(user_id)
+
+        # 处理玩家动作
+        player_result = CombatEngine.resolve_player_action(state, action, player, data)
+        if not player_result["success"]:
+            return player_result
+
+        # 检查是否战斗结束
+        if player_result.get("combat_end"):
+            return await self._end_tournament_battle(user_id, player_result)
+
+        # 处理敌人回合
+        enemy_result = CombatEngine.resolve_enemy_turn(state)
+        if enemy_result.get("combat_end"):
+            player_result["combat_end"] = True
+            player_result["outcome"] = "lose"
+            return await self._end_tournament_battle(user_id, player_result)
+
+        player_result["enemy_result"] = enemy_result
+        player_result["combat_state"] = state.to_dict()
+        return player_result
+
+    async def _end_tournament_battle(self, user_id: str, combat_result: dict) -> dict:
+        """结算竞技场战斗。"""
+        import json
+        from .tournament import get_opponent, get_win_streak_reward
+
+        battle = self._tournament_combats.pop(user_id, None)
+        if not battle:
+            return {"success": False, "message": "战斗数据丢失"}
+
+        opp = battle["opponent"]
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        won = combat_result.get("outcome") == "win"
+
+        if won:
+            gold_reward = opp.reward_gold
+            dao_yun_reward = opp.reward_dao_yun
+
+            history = await self._data_manager.get_tournament_history(user_id, limit=1)
+            current_streak = 1
+            if history and history[0]["result"] == "win":
+                current_streak = history[0]["win_streak"] + 1
+
+            streak_bonus = get_win_streak_reward(current_streak)
+            streak_bonus_json = json.dumps(streak_bonus, ensure_ascii=False) if streak_bonus else "{}"
+
+            if streak_bonus:
+                gold_reward += streak_bonus["gold"]
+                dao_yun_reward += streak_bonus["dao_yun"]
+
+            player.spirit_stones += gold_reward
+            player.dao_yun += dao_yun_reward
+
+            await self._data_manager.record_tournament_result(
+                user_id, battle["opponent_id"], "win", gold_reward, dao_yun_reward,
+                current_streak, streak_bonus_json,
+            )
+            await self._save_player(player)
+
+            msg = f"胜利！获得{gold_reward}第纳尔，{dao_yun_reward}声望"
+            if streak_bonus:
+                msg += f"\n🔥 {streak_bonus['title']}！额外奖励{streak_bonus['gold']}第纳尔，{streak_bonus['dao_yun']}声望"
+
+            return {
+                "success": True,
+                "message": msg,
+                "result": "win",
+                "gold_reward": gold_reward,
+                "dao_yun_reward": dao_yun_reward,
+                "win_streak": current_streak,
+                "streak_bonus": streak_bonus,
+                "combat_state": combat_result.get("combat_state"),
+            }
+        else:
+            await self._data_manager.record_tournament_result(
+                user_id, battle["opponent_id"], "lose", 0, 0, 0, "{}",
+            )
+            await self._save_player(player)
+
+            return {
+                "success": True,
+                "message": "战败了……再接再厉！",
+                "result": "lose",
+                "combat_state": combat_result.get("combat_state"),
+            }
+
+    async def end_tournament_battle(self, user_id: str, opponent_id: str, won: bool) -> dict:
+        """结束竞技场战斗并结算。"""
+        import json
+        from .tournament import get_opponent, get_win_streak_reward
+
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        opp = get_opponent(opponent_id)
+        if not opp:
+            return {"success": False, "message": "对手不存在"}
+
+        if won:
+            gold_reward = opp.reward_gold
+            dao_yun_reward = opp.reward_dao_yun
+
+            history = await self._data_manager.get_tournament_history(user_id, limit=1)
+            current_streak = 1
+            if history and history[0]["result"] == "win":
+                current_streak = history[0]["win_streak"] + 1
+
+            streak_bonus = get_win_streak_reward(current_streak)
+            streak_bonus_json = json.dumps(streak_bonus, ensure_ascii=False) if streak_bonus else "{}"
+
+            if streak_bonus:
+                gold_reward += streak_bonus["gold"]
+                dao_yun_reward += streak_bonus["dao_yun"]
+
+            player.spirit_stones += gold_reward
+            player.dao_yun += dao_yun_reward
+
+            await self._data_manager.record_tournament_result(
+                user_id, opponent_id, "win", gold_reward, dao_yun_reward,
+                current_streak, streak_bonus_json,
+            )
+            await self._save_player(player)
+
+            msg = f"胜利！获得{gold_reward}第纳尔，{dao_yun_reward}声望"
+            if streak_bonus:
+                msg += f"\n🔥 {streak_bonus['title']}！额外奖励{streak_bonus['gold']}第纳尔，{streak_bonus['dao_yun']}声望"
+
+            return {
+                "success": True,
+                "message": msg,
+                "result": "win",
+                "gold_reward": gold_reward,
+                "dao_yun_reward": dao_yun_reward,
+                "win_streak": current_streak,
+                "streak_bonus": streak_bonus,
+            }
+        else:
+            await self._data_manager.record_tournament_result(
+                user_id, opponent_id, "lose", 0, 0, 0, "{}",
+            )
+            await self._save_player(player)
+
+            return {
+                "success": True,
+                "message": "战败了……再接再厉！",
+                "result": "lose",
+            }

@@ -12,6 +12,12 @@ export const useIconStore = defineStore('icons', {
     loaded: false
   }),
 
+  getters: {
+    icons() {
+      return this.config?.icons || {}
+    }
+  },
+
   actions: {
     async loadConfig() {
       if (this.loaded && this.config) return this.config

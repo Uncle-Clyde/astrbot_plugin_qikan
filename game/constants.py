@@ -1,6 +1,7 @@
 """游戏常量：等级配置、物品注册表、装备注册表 - 骑马与砍杀风格。"""
 
 import hashlib
+import random
 import threading
 from dataclasses import dataclass, field
 from datetime import date
@@ -8,6 +9,295 @@ from enum import IntEnum
 
 # 保护注册表热更新（clear+update+refresh）的原子性
 _registry_lock = threading.Lock()
+
+
+# ── 装备前缀系统 ──────────────────────────────────────────────
+
+@dataclass
+class ItemPrefix:
+    """装备前缀定义"""
+    id: str
+    name: str
+    quality: str  # excellent | good | normal | poor | terrible
+    attack_bonus: int = 0
+    defense_bonus: int = 0
+    hp_bonus: int = 0
+    crit_chance: float = 0
+    description: str = ""
+
+
+ITEM_PREFIXES: dict[str, ItemPrefix] = {
+    # 顶级前缀 (excellent)
+    "legendary": ItemPrefix(
+        id="legendary",
+        name="传奇的",
+        quality="excellent",
+        attack_bonus=25,
+        defense_bonus=25,
+        hp_bonus=200,
+        crit_chance=0.05,
+        description="传说中的神兵利器"
+    ),
+    "ancient": ItemPrefix(
+        id="ancient",
+        name="古老的",
+        quality="excellent",
+        attack_bonus=20,
+        defense_bonus=20,
+        hp_bonus=150,
+        crit_chance=0.04,
+        description="蕴含古老力量的装备"
+    ),
+    "royal": ItemPrefix(
+        id="royal",
+        name="王室的",
+        quality="excellent",
+        attack_bonus=18,
+        defense_bonus=22,
+        hp_bonus=180,
+        description="王室专用精品"
+    ),
+    "holy": ItemPrefix(
+        id="holy",
+        name="神圣的",
+        quality="excellent",
+        attack_bonus=15,
+        defense_bonus=25,
+        hp_bonus=200,
+        description="被神圣祝福过的装备"
+    ),
+    
+    # 优秀前缀 (good)
+    "tempered": ItemPrefix(
+        id="tempered",
+        name="精炼的",
+        quality="good",
+        attack_bonus=15,
+        defense_bonus=15,
+        hp_bonus=100,
+        description="经过精心锻造的装备"
+    ),
+    "enchanted": ItemPrefix(
+        id="enchanted",
+        name="附魔的",
+        quality="good",
+        attack_bonus=18,
+        defense_bonus=12,
+        hp_bonus=80,
+        crit_chance=0.02,
+        description="附有魔法的装备"
+    ),
+    "masterwork": ItemPrefix(
+        id="masterwork",
+        name="大师的",
+        quality="good",
+        attack_bonus=15,
+        defense_bonus=15,
+        hp_bonus=100,
+        description="大师级工匠作品"
+    ),
+    "veteran": ItemPrefix(
+        id="veteran",
+        name="老兵的",
+        quality="good",
+        attack_bonus=12,
+        defense_bonus=18,
+        hp_bonus=120,
+        description="久经沙场的老兵装备"
+    ),
+    "sharpened": ItemPrefix(
+        id="sharpened",
+        name="开刃的",
+        quality="good",
+        attack_bonus=20,
+        defense_bonus=8,
+        hp_bonus=50,
+        description="锋利无比"
+    ),
+    
+    # 普通前缀 (normal)
+    "fine": ItemPrefix(
+        id="fine",
+        name="精良的",
+        quality="normal",
+        attack_bonus=10,
+        defense_bonus=10,
+        hp_bonus=60,
+        description="品质不错的装备"
+    ),
+    "balanced": ItemPrefix(
+        id="balanced",
+        name="平衡的",
+        quality="normal",
+        attack_bonus=10,
+        defense_bonus=12,
+        hp_bonus=50,
+        description="攻守平衡的装备"
+    ),
+    "reinforced": ItemPrefix(
+        id="reinforced",
+        name="强化的",
+        quality="normal",
+        attack_bonus=8,
+        defense_bonus=15,
+        hp_bonus=80,
+        description="经过加固的装备"
+    ),
+    "soldier": ItemPrefix(
+        id="soldier",
+        name="军用的",
+        quality="normal",
+        attack_bonus=12,
+        defense_bonus=10,
+        hp_bonus=50,
+        description="标准军用装备"
+    ),
+    
+    # 较差前缀 (poor)
+    "worn": ItemPrefix(
+        id="worn",
+        name="破旧的",
+        quality="poor",
+        attack_bonus=5,
+        defense_bonus=5,
+        hp_bonus=30,
+        description="已经破旧的装备"
+    ),
+    "cheap": ItemPrefix(
+        id="cheap",
+        name="廉价的",
+        quality="poor",
+        attack_bonus=3,
+        defense_bonus=8,
+        hp_bonus=40,
+        description="廉价但实用的装备"
+    ),
+    "damaged": ItemPrefix(
+        id="damaged",
+        name="损坏的",
+        quality="poor",
+        attack_bonus=2,
+        defense_bonus=5,
+        hp_bonus=20,
+        description="有所损坏的装备"
+    ),
+    
+    # 垃圾前缀 (terrible)
+    "rusted": ItemPrefix(
+        id="rusted",
+        name="生锈的",
+        quality="terrible",
+        attack_bonus=-5,
+        defense_bonus=0,
+        hp_bonus=10,
+        description="严重生锈的装备"
+    ),
+    "broken": ItemPrefix(
+        id="broken",
+        name="断裂的",
+        quality="terrible",
+        attack_bonus=-8,
+        defense_bonus=-5,
+        hp_bonus=0,
+        description="已经断裂的装备"
+    ),
+    "cursed": ItemPrefix(
+        id="cursed",
+        name="诅咒的",
+        quality="terrible",
+        attack_bonus=5,
+        defense_bonus=-10,
+        hp_bonus=-50,
+        description="被诅咒的不祥装备"
+    ),
+    "rotten": ItemPrefix(
+        id="rotten",
+        name="腐朽的",
+        quality="terrible",
+        attack_bonus=-10,
+        defense_bonus=-8,
+        hp_bonus=0,
+        description="快要腐朽的装备"
+    ),
+    
+    # 无前缀 (no prefix)
+    "none": ItemPrefix(
+        id="none",
+        name="",
+        quality="normal",
+        attack_bonus=0,
+        defense_bonus=0,
+        hp_bonus=0,
+        description=""
+    ),
+}
+
+
+def get_prefix_by_quality(quality: str) -> str | None:
+    """根据品质随机获取一个前缀"""
+    candidates = [p_id for p_id, p in ITEM_PREFIXES.items() if p.quality == quality]
+    return random.choice(candidates) if candidates else None
+
+
+def get_random_prefix() -> str:
+    """随机获取一个前缀（加权）"""
+    weights = {
+        "legendary": 1,
+        "ancient": 2,
+        "royal": 3,
+        "holy": 3,
+        "tempered": 5,
+        "enchanted": 5,
+        "masterwork": 5,
+        "veteran": 5,
+        "sharpened": 5,
+        "fine": 15,
+        "balanced": 10,
+        "reinforced": 10,
+        "soldier": 10,
+        "worn": 10,
+        "cheap": 8,
+        "damaged": 5,
+        "rusted": 3,
+        "broken": 2,
+        "cursed": 1,
+        "rotten": 1,
+    }
+    items = list(weights.keys())
+    weights_list = list(weights.values())
+    return random.choices(items, weights=weights_list, k=1)[0]
+
+
+def get_prefix_bonus(prefix_id: str) -> dict:
+    """获取前缀属性加成"""
+    prefix = ITEM_PREFIXES.get(prefix_id, ITEM_PREFIXES["none"])
+    return {
+        "attack_bonus": prefix.attack_bonus,
+        "defense_bonus": prefix.defense_bonus,
+        "hp_bonus": prefix.hp_bonus,
+        "crit_chance": prefix.crit_chance,
+    }
+
+
+def get_prefix_display_name(prefix_id: str) -> str:
+    """获取带前缀的装备显示名称"""
+    prefix = ITEM_PREFIXES.get(prefix_id, ITEM_PREFIXES["none"])
+    return prefix.name
+
+
+# ── 品质定义 ───────────────────────────────────────────────
+
+PREFIX_QUALITY_ORDER = ["terrible", "poor", "normal", "good", "excellent"]
+PREFIX_COST = {
+    "repair": {  # 修复坏前缀
+        "terrible": 500,
+        "poor": 300,
+    },
+    "enhance": {  # 添加好前缀
+        "normal": 200,
+        "none": 500,
+    },
+}
 
 
 class RealmLevel(IntEnum):
@@ -192,6 +482,19 @@ ITEM_REGISTRY: dict[str, ItemDef] = {
         item_type="material",
         description="卡拉迪亚大陆通用货币",
     ),
+    "arrow": ItemDef(
+        item_id="arrow",
+        name="箭矢",
+        item_type="material",
+        description="用于弓弩的箭矢",
+    ),
+    "mana_potion": ItemDef(
+        item_id="mana_potion",
+        name="体力药水",
+        item_type="consumable",
+        description="恢复30点体力",
+        effect={"heal_lingqi": 30},
+    ),
     "breakthrough_pill": ItemDef(
         item_id="breakthrough_pill",
         name="晋级证书",
@@ -279,7 +582,6 @@ MOUNT_SLOTS = [
 MOUNT_SLOT_NAMES: dict[str, str] = {
     "mount": "坐骑",
     "mount_armor": "马甲",
-    "mount_weapon": "马战武器",
     "horse_armament": "马具",
 }
 
@@ -305,6 +607,11 @@ MOUNT_TYPES = [
     "destrier",     # 冲锋马
     "pony",         # 矮马
     "camel",        # 骆驼
+    "war_camel",    # 战骆驼
+    "mule",         # 骡子
+    "donkey",       # 驴
+    "boar",         # 野猪
+    " armored_horse",# 铁甲马
     "armored_horse",# 铁甲马
 ]
 
@@ -314,6 +621,10 @@ MOUNT_TYPE_NAMES: dict[str, str] = {
     "destrier": "冲锋马",
     "pony": "矮马",
     "camel": "骆驼",
+    "war_camel": "战骆驼",
+    "mule": "骡子",
+    "donkey": "驴",
+    "boar": "野猪",
     "armored_horse": "铁甲马",
 }
 
@@ -387,6 +698,93 @@ _COMMON_WEAPONS: list[EquipmentDef] = [
                  attack=7, description="削尖的木棍充当长矛"),
     EquipmentDef("common_farm_axe", "农斧", EquipmentTier.COMMON, "weapon",
                  attack=9, description="农夫劈柴用的斧头"),
+    # 出身专属装备
+    EquipmentDef("pitchfork", "草叉", EquipmentTier.COMMON, "weapon",
+                 attack=8, description="农民干活用的草叉"),
+    EquipmentDef("pirate_sword", "海盗刀", EquipmentTier.COMMON, "weapon",
+                 attack=12, description="海盗常用的短刀"),
+    EquipmentDef("nomad_saber", "蒙古刀", EquipmentTier.COMMON, "weapon",
+                 attack=10, description="草原马贼常用的弯刀"),
+    EquipmentDef("short_bow", "猎弓", EquipmentTier.COMMON, "weapon",
+                 attack=7, description="绿林好汉常用的短弓"),
+    EquipmentDef("club", "木棍", EquipmentTier.COMMON, "weapon",
+                 attack=6, description="山贼使用的粗木棍"),
+    # 出身专属装备 - 修正ID
+    EquipmentDef("iron_sword", "铁剑", EquipmentTier.COMMON, "weapon",
+                 attack=12, description="普通铁剑"),
+    EquipmentDef("fine_sword", "精钢剑", EquipmentTier.FINE, "weapon",
+                 attack=18, description="精炼钢剑"),
+]
+
+# 传奇套装装备
+# 海盗王套装 (VIKING)
+_LEGENDARY_VIKING: list[EquipmentDef] = [
+    EquipmentDef("vikings_helmet", "海盗王头盔", EquipmentTier.LEGENDARY, "head",
+                 defense=40, hp=150, description="海盗王的头盔，蕴含着北海的力量"),
+    EquipmentDef("vikings_armor", "海盗王铠甲", EquipmentTier.LEGENDARY, "body",
+                 defense=60, hp=200, description="海盗王的铠甲，用海底寒铁打造"),
+    EquipmentDef("vikings_sword", "海盗王之剑", EquipmentTier.LEGENDARY, "weapon",
+                 attack=80, defense=15, description="海盗王的佩剑，传说斩断过无数船只"),
+    EquipmentDef("vikings_shield", "海盗王盾牌", EquipmentTier.LEGENDARY, "accessory1",
+                 defense=35, hp=100, description="海盗王的盾牌，坚不可摧"),
+    EquipmentDef("vikings_boots", "海盗王战靴", EquipmentTier.LEGENDARY, "legs",
+                 defense=25, hp=50, attack=10, description="海盗王的战靴，适合海上作战"),
+]
+
+# 响马王套装 (NOMAD)
+_LEGENDARY_NOMAD: list[EquipmentDef] = [
+    EquipmentDef("nomad_helmet", "响马王头盔", EquipmentTier.LEGENDARY, "head",
+                 defense=30, hp=100, description="草原响马王的头盔"),
+    EquipmentDef("nomad_armor", "响马王皮甲", EquipmentTier.LEGENDARY, "body",
+                 defense=45, hp=80, description="响马王的皮甲，轻便而坚固"),
+    EquipmentDef("nomad_bow", "响马王之弓", EquipmentTier.LEGENDARY, "weapon",
+                 attack=70, description="响马王的弓，射程极远"),
+    EquipmentDef("legend_nomad_saber", "响马王弯刀", EquipmentTier.LEGENDARY, "weapon",
+                 attack=65, defense=10, description="响马王的弯刀，快如闪电"),
+    EquipmentDef("nomad_cape", "响马王披风", EquipmentTier.LEGENDARY, "shoulders",
+                 defense=20, hp=50, description="响马王的披风，象征草原的速度"),
+]
+
+# 绿林王套装 (FOREST)
+_LEGENDARY_FOREST: list[EquipmentDef] = [
+    EquipmentDef("forest_helmet", "绿林王头盔", EquipmentTier.LEGENDARY, "head",
+                 defense=25, hp=80, attack=10, description="绿林王的头盔，与森林融为一体"),
+    EquipmentDef("forest_armor", "绿林王皮甲", EquipmentTier.LEGENDARY, "body",
+                 defense=40, hp=60, description="绿林王的皮甲，行动无声"),
+    EquipmentDef("forest_bow", "绿林王之弓", EquipmentTier.LEGENDARY, "weapon",
+                 attack=75, description="绿林王的弓，百步穿杨"),
+    EquipmentDef("forest_dagger", "绿林王匕首", EquipmentTier.LEGENDARY, "weapon",
+                 attack=50, defense=5, description="绿林王的匕首，淬有剧毒"),
+    EquipmentDef("forest_cloak", "绿林王斗篷", EquipmentTier.LEGENDARY, "shoulders",
+                 defense=15, hp=40, description="绿林王的斗篷，完美的伪装"),
+]
+
+# 山贼王套装 (MOUNTAIN)
+_LEGENDARY_MOUNTAIN: list[EquipmentDef] = [
+    EquipmentDef("mountain_helmet", "山贼王头盔", EquipmentTier.LEGENDARY, "head",
+                 defense=45, hp=120, description="山贼王的头盔，坚固如山"),
+    EquipmentDef("mountain_armor", "山贼王铠甲", EquipmentTier.LEGENDARY, "body",
+                 defense=70, hp=180, description="山贼王的铠甲，岩石般坚硬"),
+    EquipmentDef("mountain_hammer", "山贼王战锤", EquipmentTier.LEGENDARY, "weapon",
+                 attack=90, defense=20, description="山贼王的战锤，一锤可碎巨石"),
+    EquipmentDef("mountain_shield", "山贼王巨盾", EquipmentTier.LEGENDARY, "accessory1",
+                 defense=50, hp=150, description="山贼王的盾牌，坚不可摧"),
+    EquipmentDef("mountain_boots", "山贼王战靴", EquipmentTier.LEGENDARY, "legs",
+                 defense=30, hp=60, description="山贼王的战靴，登山如履平地"),
+]
+
+# 盗圣套装 (LORD)
+_LEGENDARY_LORD: list[EquipmentDef] = [
+    EquipmentDef("lord_helmet", "盗圣头盔", EquipmentTier.LEGENDARY, "head",
+                 defense=35, hp=100, attack=15, description="盗圣的头盔，蕴含智慧的力量"),
+    EquipmentDef("lord_armor", "盗圣铠甲", EquipmentTier.LEGENDARY, "body",
+                 defense=55, hp=150, description="盗圣的铠甲，优雅而致命"),
+    EquipmentDef("lord_sword", "盗圣之剑", EquipmentTier.LEGENDARY, "weapon",
+                 attack=85, defense=25, description="盗圣的佩剑，神出鬼没"),
+    EquipmentDef("lord_cape", "盗圣披风", EquipmentTier.LEGENDARY, "shoulders",
+                 defense=20, hp=60, attack=10, description="盗圣的披风，来去如风"),
+    EquipmentDef("lord_ring", "盗圣戒指", EquipmentTier.LEGENDARY, "accessory1",
+                 hp=80, attack=20, defense=15, description="盗圣的戒指，蕴含神秘力量"),
 ]
 
 _COMMON_HEAD: list[EquipmentDef] = [
@@ -769,7 +1167,8 @@ for _eq in (
     _FINE_WEAPONS + _FINE_HEAD + _FINE_BODY + _FINE_HANDS + _FINE_LEGS + _FINE_SHOULDERS + _FINE_ACCESSORIES +
     _RARE_WEAPONS + _RARE_HEAD + _RARE_BODY + _RARE_HANDS + _RARE_LEGS + _RARE_SHOULDERS + _RARE_ACCESSORIES +
     _EPIC_WEAPONS + _EPIC_HEAD + _EPIC_BODY + _EPIC_HANDS + _EPIC_LEGS + _EPIC_SHOULDERS + _EPIC_ACCESSORIES +
-    _LEGENDARY_WEAPONS + _LEGENDARY_HEAD + _LEGENDARY_BODY + _LEGENDARY_HANDS + _LEGENDARY_LEGS + _LEGENDARY_SHOULDERS + _LEGENDARY_ACCESSORIES
+    _LEGENDARY_WEAPONS + _LEGENDARY_HEAD + _LEGENDARY_BODY + _LEGENDARY_HANDS + _LEGENDARY_LEGS + _LEGENDARY_SHOULDERS + _LEGENDARY_ACCESSORIES +
+    _LEGENDARY_VIKING + _LEGENDARY_NOMAD + _LEGENDARY_FOREST + _LEGENDARY_MOUNTAIN + _LEGENDARY_LORD
 ):
     EQUIPMENT_REGISTRY[_eq.equip_id] = _eq
 
@@ -800,18 +1199,36 @@ def _refresh_equipment_items():
         ITEM_REGISTRY.pop(item_id, None)
 
 
+# 出身专属装备ID（这些装备只在代码中定义，不应被数据库覆盖）
+_SPAWN_EXCLUSIVE_EQUIP_IDS = frozenset({
+    "pitchfork", "common_straw_hat", "iron_sword", "common_farm_axe",
+    "pirate_sword", "nomad_saber", "short_bow", "club",
+})
+
+
 def set_equipment_registry(equipments: dict[str, EquipmentDef]):
     """替换装备注册表（供数据库加载后同步到运行时）。
 
     采用先增后删 + 写锁保护，避免读者看到空/半更新状态。
     在 asyncio 单线程中同步代码不会被协程打断，锁主要防御多线程场景。
+    出身专属装备始终保留，不被数据库覆盖。
     """
     new_data = dict(equipments)
     with _registry_lock:
         # 先写入所有新条目（覆盖同名旧条目）
         EQUIPMENT_REGISTRY.update(new_data)
-        # 再删除已不存在的旧条目
-        stale = [k for k in EQUIPMENT_REGISTRY if k not in new_data]
+        # 确保出身专属装备始终存在（从代码内置定义中恢复）
+        for equip_id in _SPAWN_EXCLUSIVE_EQUIP_IDS:
+            if equip_id not in EQUIPMENT_REGISTRY:
+                for _eq in _COMMON_WEAPONS + _COMMON_HEAD + _COMMON_BODY:
+                    if _eq.equip_id == equip_id:
+                        EQUIPMENT_REGISTRY[equip_id] = _eq
+                        break
+        # 再删除已不存在的旧条目（但保留出身专属装备）
+        stale = [
+            k for k in EQUIPMENT_REGISTRY
+            if k not in new_data and k not in _SPAWN_EXCLUSIVE_EQUIP_IDS
+        ]
         for k in stale:
             del EQUIPMENT_REGISTRY[k]
         _refresh_equipment_items()
@@ -823,30 +1240,36 @@ MOUNT_REGISTRY: dict[str, MountDef] = {}
 
 _MOUNT_COMMON: list[MountDef] = [
     MountDef("common_pony", "矮马", MountTier.COMMON, "pony", speed_bonus=5, description="体型较小的马匹"),
-    MountDef("common_donkey", "驴", MountTier.COMMON, "horse", speed_bonus=3, description="耐力不错的驮兽"),
-    MountDef("common_mule", "骡子", MountTier.COMMON, "horse", speed_bonus=4, capacity=20, description="驴和马杂交的产物"),
+    MountDef("common_donkey", "驴", MountTier.COMMON, "donkey", speed_bonus=3, description="耐力不错的驮兽"),
+    MountDef("common_mule", "骡子", MountTier.COMMON, "mule", speed_bonus=4, capacity=20, description="驴和马杂交的产物"),
+    MountDef("common_boar", "小野猪", MountTier.COMMON, "boar", speed_bonus=6, attack_bonus=3, description="森林中常见的野猪"),
 ]
 
 _MOUNT_FINE: list[MountDef] = [
     MountDef("fine_horse", "棕色马", MountTier.FINE, "horse", speed_bonus=10, description="常见的骑乘马"),
     MountDef("fine_war_horse", "轻型战马", MountTier.FINE, "war_horse", speed_bonus=12, attack_bonus=5, description="适合冲锋的轻型战马"),
     MountDef("fine_desert_horse", "沙漠马", MountTier.FINE, "horse", speed_bonus=15, description="耐热的沙漠马"),
+    MountDef("fine_camel", "单峰骆驼", MountTier.FINE, "camel", speed_bonus=18, capacity=25, description="沙漠商队常用的骆驼"),
+    MountDef("fine_mule", "健壮骡子", MountTier.FINE, "mule", speed_bonus=8, capacity=30, description="更适合载重的骡子"),
 ]
 
 _MOUNT_RARE: list[MountDef] = [
     MountDef("rare_war_horse", "诺德战马", MountTier.RARE, "war_horse", speed_bonus=20, attack_bonus=10, defense_bonus=5, description="诺德人培育的优秀战马"),
     MountDef("rare_destrier", "冲锋马", MountTier.RARE, "destrier", speed_bonus=18, attack_bonus=15, hp_bonus=50, description="重型骑枪冲锋的最佳选择"),
-    MountDef("rare_camel", "骆驼", MountTier.RARE, "camel", speed_bonus=25, capacity=30, description="沙漠之舟"),
+    MountDef("rare_camel", "战骆驼", MountTier.RARE, "war_camel", speed_bonus=22, attack_bonus=8, defense_bonus=10, description="沙漠作战专用骆驼"),
+    MountDef("rare_boar", "战野猪", MountTier.RARE, "boar", speed_bonus=15, attack_bonus=20, defense_bonus=8, description="森林中冲锋陷阵的野猪"),
 ]
 
 _MOUNT_EPIC: list[MountDef] = [
     MountDef("epic_warhorse", "帝国重装战马", MountTier.EPIC, "war_horse", speed_bonus=25, attack_bonus=20, defense_bonus=15, hp_bonus=100, description="帝国重装骑兵的标配"),
     MountDef("epic_royal_horse", "皇家猎马", MountTier.EPIC, "horse", speed_bonus=30, description="王室狩猎专用马"),
+    MountDef("epic_camel", "沙漠之王", MountTier.EPIC, "war_camel", speed_bonus=28, attack_bonus=15, defense_bonus=20, hp_bonus=80, description="沙漠中最强大的骆驼"),
 ]
 
 _MOUNT_LEGENDARY: list[MountDef] = [
     MountDef("legendary_grunar", "格鲁纳", MountTier.LEGENDARY, "armored_horse", speed_bonus=40, attack_bonus=30, defense_bonus=25, hp_bonus=200, capacity=50, description="传说中的钢铁战马"),
     MountDef("legendary_bucephalus", "布塞法鲁斯", MountTier.LEGENDARY, "destrier", speed_bonus=50, attack_bonus=40, defense_bonus=30, hp_bonus=300, description="史诗级冲锋马王者"),
+    MountDef("legendary_elephant", "战象", MountTier.LEGENDARY, "armored_horse", speed_bonus=20, attack_bonus=50, defense_bonus=40, hp_bonus=500, capacity=100, description="卡拉迪亚最强大的坐骑"),
 ]
 
 for _mt in (_MOUNT_COMMON + _MOUNT_FINE + _MOUNT_RARE + _MOUNT_EPIC + _MOUNT_LEGENDARY):
@@ -858,32 +1281,52 @@ MOUNT_EQUIPMENT_REGISTRY: dict[str, MountEquipmentDef] = {}
 
 _MOUNT_ARMOR_COMMON: list[MountEquipmentDef] = [
     MountEquipmentDef("mount_armor_cloth", "布马甲", EquipmentTier.COMMON, "mount_armor", defense_bonus=2, description="简陋的布料马甲"),
+    MountEquipmentDef("mount_armor_straw", "草绳马甲", EquipmentTier.COMMON, "mount_armor", defense_bonus=1, description="用草绳编制的简陋马甲"),
+    MountEquipmentDef("mount_armor_ragged", "破旧马甲", EquipmentTier.COMMON, "mount_armor", defense_bonus=3, description="缝缝补补的旧马甲"),
     MountEquipmentDef("mount_armor_leather", "皮马甲", EquipmentTier.FINE, "mount_armor", defense_bonus=5, description="皮革制成的马甲"),
+    MountEquipmentDef("mount_armor_reinforced", "加固皮甲", EquipmentTier.FINE, "mount_armor", defense_bonus=7, description="经过加固处理的皮马甲"),
+    MountEquipmentDef("mount_armor_padded", "棉絮马甲", EquipmentTier.FINE, "mount_armor", defense_bonus=6, hp_bonus=10, description="内衬棉絮的马甲"),
 ]
 
 _MOUNT_ARMOR_RARE: list[MountEquipmentDef] = [
     MountEquipmentDef("mount_armor_chain", "锁子马甲", EquipmentTier.RARE, "mount_armor", defense_bonus=10, hp_bonus=20, description="锁子甲编制的马甲"),
     MountEquipmentDef("mount_armor_plate", "板甲马甲", EquipmentTier.EPIC, "mount_armor", defense_bonus=20, hp_bonus=50, description="重装板甲马甲"),
+    MountEquipmentDef("mount_armor_dragon", "龙鳞马甲", EquipmentTier.LEGENDARY, "mount_armor", defense_bonus=30, hp_bonus=80, special_effect="龙威", description="用龙鳞制成的神级马甲"),
 ]
 
 _MOUNT_WEAPON_COMMON: list[MountEquipmentDef] = [
     MountEquipmentDef("mount_lance_wood", "木骑枪", EquipmentTier.COMMON, "mount_weapon", attack_bonus=5, description="简易木制骑枪"),
+    MountEquipmentDef("mount_lance_bamboo", "竹骑枪", EquipmentTier.COMMON, "mount_weapon", attack_bonus=4, description="用竹子制作的轻便骑枪"),
+    MountEquipmentDef("mount_lance_crude", "粗制骑枪", EquipmentTier.COMMON, "mount_weapon", attack_bonus=6, description="手工打造的粗糙骑枪"),
     MountEquipmentDef("mount_lance_iron", "铁骑枪", EquipmentTier.FINE, "mount_weapon", attack_bonus=10, description="铁制骑枪"),
+    MountEquipmentDef("mount_lance_heavy", "重铁骑枪", EquipmentTier.FINE, "mount_weapon", attack_bonus=12, defense_bonus=3, description="加重了的铁制骑枪"),
+    MountEquipmentDef("mount_sword_wood", "木骑剑", EquipmentTier.COMMON, "mount_weapon", attack_bonus=5, description="木制骑剑"),
+    MountEquipmentDef("mount_axe_wood", "木骑斧", EquipmentTier.COMMON, "mount_weapon", attack_bonus=7, description="木制骑斧，威力不错"),
 ]
 
 _MOUNT_WEAPON_RARE: list[MountEquipmentDef] = [
     MountEquipmentDef("mount_lance_steel", "钢骑枪", EquipmentTier.RARE, "mount_weapon", attack_bonus=20, description="优质钢制骑枪"),
     MountEquipmentDef("mount_lance_hero", "英雄骑枪", EquipmentTier.LEGENDARY, "mount_weapon", attack_bonus=40, special_effect="穿刺", description="传奇英雄使用的骑枪"),
+    MountEquipmentDef("mount_sword_crystal", "水晶骑剑", EquipmentTier.EPIC, "mount_weapon", attack_bonus=30, special_effect="冰霜", description="由冰晶打造的神剑"),
 ]
 
 _HORSE_ARMAMENT_COMMON: list[MountEquipmentDef] = [
     MountEquipmentDef("horse_saddle_basic", "简易马鞍", EquipmentTier.COMMON, "horse_armament", speed_bonus=2, description="最基本的马鞍"),
+    MountEquipmentDef("horse_saddle_straw", "草垫马鞍", EquipmentTier.COMMON, "horse_armament", speed_bonus=1, description="用草垫充当的简陋马鞍"),
+    MountEquipmentDef("horse_saddle_rope", "绳编马鞍", EquipmentTier.COMMON, "horse_armament", defense_bonus=3, speed_bonus=2, description="用绳子编制的临时马鞍"),
     MountEquipmentDef("horse_saddle_leather", "皮马鞍", EquipmentTier.FINE, "horse_armament", speed_bonus=5, defense_bonus=3, description="皮革包裹的马鞍"),
+    MountEquipmentDef("horse_saddle_padded", "棉垫马鞍", EquipmentTier.FINE, "horse_armament", speed_bonus=4, defense_bonus=2, hp_bonus=10, description="带有棉垫的舒适马鞍"),
+    MountEquipmentDef("horse_saddle_iron", "铁框马鞍", EquipmentTier.FINE, "horse_armament", speed_bonus=4, defense_bonus=5, description="添加了铁框加固的马鞍"),
+    MountEquipmentDef("horse_stirrup_wood", "木马镫", EquipmentTier.COMMON, "horse_armament", speed_bonus=1, description="简单的木质马镫"),
+    MountEquipmentDef("horse_stirrup_iron", "铁马镫", EquipmentTier.FINE, "horse_armament", speed_bonus=2, defense_bonus=2, description="铁制马镫，更安全"),
+    MountEquipmentDef("horse_bridle_rope", "绳缰绳", EquipmentTier.COMMON, "horse_armament", speed_bonus=1, description="简陋的绳索缰绳"),
+    MountEquipmentDef("horse_bridle_leather", "皮缰绳", EquipmentTier.FINE, "horse_armament", speed_bonus=2, description="皮革制成的缰绳"),
 ]
 
 _HORSE_ARMAMENT_RARE: list[MountEquipmentDef] = [
     MountEquipmentDef("horse_saddle_war", "骑战马鞍", EquipmentTier.RARE, "horse_armament", speed_bonus=10, defense_bonus=8, hp_bonus=20, description="适合战斗的马鞍"),
     MountEquipmentDef("horse_saddle_royal", "皇家马鞍", EquipmentTier.LEGENDARY, "horse_armament", speed_bonus=20, defense_bonus=15, hp_bonus=50, special_effect="冲锋", description="王室专用马鞍"),
+    MountEquipmentDef("horse_stirrup_golden", "金马镫", EquipmentTier.EPIC, "horse_armament", speed_bonus=5, defense_bonus=8, special_effect="震慑", description="黄金打造的马镫"),
 ]
 
 for _me in (_MOUNT_ARMOR_COMMON + _MOUNT_ARMOR_RARE + _MOUNT_WEAPON_COMMON + _MOUNT_WEAPON_RARE + _HORSE_ARMAMENT_COMMON + _HORSE_ARMAMENT_RARE):

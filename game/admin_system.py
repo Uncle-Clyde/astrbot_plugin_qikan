@@ -18,7 +18,8 @@ class AdminLevel:
     VIEWER = 1        # 观察员 - 只能查看数据
     MODERATOR = 2     # 版主 - 玩家管理、发放称号
     ADMIN = 3         # 管理员 - 全功能（不含配置）
-    SUPER_ADMIN = 4    # 超级管理员 - 全部功能
+    SUPER_ADMIN = 4   # 超级管理员 - 全部功能 + UI自定义
+    OWNER = 5         # 创始人 - 最高权限 + 分发管理员权限
 
 
 ADMIN_LEVEL_NAMES = {
@@ -27,6 +28,7 @@ ADMIN_LEVEL_NAMES = {
     AdminLevel.MODERATOR: "版主",
     AdminLevel.ADMIN: "管理员",
     AdminLevel.SUPER_ADMIN: "超级管理员",
+    AdminLevel.OWNER: "创始人",
 }
 
 
@@ -64,6 +66,27 @@ class AdminManager:
             "password": password,
         }
     
+    def set_owner_admin(self, username: str, password: str):
+        """设置创始人管理员（仅能通过配置文件设置）"""
+        admin = AdminAccount(
+            username=username,
+            password_hash=self.hash_password(password),
+            level=AdminLevel.OWNER,
+        )
+        self._admins[username] = admin
+    
+    def can_customize_ui(self, level: int) -> bool:
+        """检查是否可以自定义UI（需要lv4+）"""
+        return level >= AdminLevel.SUPER_ADMIN
+    
+    def can_manage_admins(self, level: int) -> bool:
+        """检查是否可以管理管理员（需要lv5）"""
+        return level >= AdminLevel.OWNER
+    
+    def can_upload_icons(self, level: int) -> bool:
+        """检查是否可以上传图标（需要lv4+）"""
+        return level >= AdminLevel.SUPER_ADMIN
+    
     def hash_password(self, password: str) -> str:
         """简单密码哈希（生产环境应使用更安全的方式）"""
         import hashlib
@@ -84,8 +107,11 @@ class AdminManager:
         if username in self._admins:
             return {"success": False, "message": "管理员已存在"}
         
-        if level <= AdminLevel.NONE or level > AdminLevel.SUPER_ADMIN:
+        if level <= AdminLevel.NONE or level > AdminLevel.OWNER:
             return {"success": False, "message": "无效的管理员等级"}
+        
+        if level >= AdminLevel.OWNER:
+            return {"success": False, "message": "无法创建创始人级别管理员"}
         
         admin = AdminAccount(
             username=username,
@@ -240,8 +266,11 @@ class AdminManager:
         if username not in self._admins:
             return {"success": False, "message": "管理员不存在"}
         
-        if new_level <= AdminLevel.NONE or new_level > AdminLevel.SUPER_ADMIN:
+        if new_level <= AdminLevel.NONE or new_level > AdminLevel.OWNER:
             return {"success": False, "message": "无效的管理员等级"}
+        
+        if new_level == AdminLevel.OWNER:
+            return {"success": False, "message": "无法设置创始人级别，只能通过配置文件创建"}
         
         operator_session = self._sessions.get(operator)
         if not operator_session:
@@ -249,11 +278,14 @@ class AdminManager:
         
         target_admin = self._admins[username]
         
-        if target_admin.level == AdminLevel.SUPER_ADMIN and operator_session["level"] != AdminLevel.SUPER_ADMIN:
-            return {"success": False, "message": "只有超级管理员可以修改超级管理员的等级"}
+        if target_admin.level == AdminLevel.OWNER:
+            return {"success": False, "message": "无法修改创始人级别管理员"}
         
-        if operator_session["level"] < AdminLevel.ADMIN:
-            return {"success": False, "message": "权限不足"}
+        if target_admin.level == AdminLevel.SUPER_ADMIN and operator_session["level"] != AdminLevel.OWNER:
+            return {"success": False, "message": "只有创始人可以修改超级管理员的等级"}
+        
+        if operator_session["level"] < AdminLevel.SUPER_ADMIN:
+            return {"success": False, "message": "权限不足，需要超级管理员或更高"}
         
         if new_level >= operator_session["level"] and username != operator:
             return {"success": False, "message": "不能授予比自己更高或同等的管理员等级"}

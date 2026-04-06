@@ -37,7 +37,7 @@
           >
             <span class="marker-icon">{{ getMarkerIcon(loc.type) }}</span>
             <span class="marker-name">{{ loc.name }}</span>
-            <span class="marker-coord">({{ loc.x }},{{ loc.y }})</span>
+            <span class="marker-type">{{ getLocationTypeName(loc.type) }}</span>
           </div>
           
           <div 
@@ -45,8 +45,21 @@
             class="player-marker"
             :style="{ left: playerLocation.x + 'px', top: playerLocation.y + 'px' }"
           >
-            👤
-            <span class="player-coord">({{ playerLocation.x }},{{ playerLocation.y }})</span>
+            <img v-if="getPlayerIcon().startsWith('/')" :src="getPlayerIcon()" class="player-icon-img" />
+            <span v-else class="player-icon-emoji">{{ getPlayerIcon() }}</span>
+            <span class="player-label">你</span>
+          </div>
+          
+          <div 
+            v-for="p in otherPlayers"
+            :key="p.user_id"
+            class="other-player-marker"
+            :style="{ left: p.x + 'px', top: p.y + 'px' }"
+            :title="p.name + ' - ' + p.realm_name"
+          >
+            <img v-if="getOtherPlayerIcon(p).startsWith('/')" :src="getOtherPlayerIcon(p)" class="player-icon-img" />
+            <span v-else class="player-icon-emoji">{{ getOtherPlayerIcon(p) }}</span>
+            <span class="player-label">{{ p.name }}</span>
           </div>
         </div>
       </div>
@@ -57,13 +70,36 @@
         <p><strong>坐标:</strong> X: {{ selectedLocation.x }}, Y: {{ selectedLocation.y }}</p>
         <p><strong>类型:</strong> {{ getLocationTypeName(selectedLocation.type) }}</p>
         <p><strong>描述:</strong> {{ selectedLocation.description }}</p>
-        <p v-if="selectedLocation.faction"><strong>阵营:</strong> {{ selectedLocation.faction }}</p>
+        <p v-if="selectedLocation.faction_name"><strong>阵营:</strong> {{ selectedLocation.faction_name }}</p>
+        <p v-else-if="selectedLocation.faction"><strong>阵营:</strong> {{ getFactionName(selectedLocation.faction) }}</p>
         <p v-if="selectedLocation.favor !== undefined"><strong>好感度:</strong> {{ selectedLocation.favor }}</p>
+        <p v-if="selectedLocation.prosperity"><strong>繁荣度:</strong> {{ selectedLocation.prosperity }}</p>
       </div>
       <template #footer>
         <el-button @click="detailVisible = false">关闭</el-button>
-        <el-button type="primary" @click="handleTravel" :disabled="!canTravel">
+        <el-button 
+          v-if="isTravelingToSelected"
+          type="success" 
+          @click="handleEnterLocation"
+          :loading="gameStore.isButtonLoading('enter')"
+        >
+          🚪 进入据点
+        </el-button>
+        <el-button 
+          v-else-if="canTravel"
+          type="primary" 
+          @click="handleTravel" 
+          :loading="gameStore.isButtonLoading('travel')"
+        >
           🚶 前往此处
+        </el-button>
+        <el-button 
+          v-else-if="isAtSelectedLocation"
+          type="warning" 
+          @click="handleEnterLocation"
+          :loading="gameStore.isButtonLoading('enter')"
+        >
+          🚪 进入据点
         </el-button>
       </template>
     </el-dialog>
@@ -72,10 +108,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
+import { useIconStore } from '../stores/icons'
 import { ElMessage } from 'element-plus'
 
+const router = useRouter()
 const gameStore = useGameStore()
+const iconStore = useIconStore()
 
 const mapRef = ref(null)
 const locations = ref([])
@@ -83,8 +123,20 @@ const currentLocation = ref('')
 const selectedLocation = ref(null)
 const detailVisible = ref(false)
 const playerLocation = ref(null)
+const otherPlayers = ref([])
+
+const getPlayerIcon = () => {
+  return iconStore.icons?.player?.image || iconStore.icons?.player?.emoji || '👤'
+}
+
+const getOtherPlayerIcon = (player) => {
+  return player?.icon || '👤'
+}
 
 const getMarkerIcon = (type) => {
+  const iconConfig = iconStore.icons?.[type]
+  if (iconConfig?.image) return iconConfig.image
+  if (iconConfig?.emoji) return iconConfig.emoji
   const icons = { town: '🏰', castle: '⚔️', village: '🏘️', bandit: '⛺' }
   return icons[type] || '📍'
 }
@@ -94,8 +146,29 @@ const getLocationTypeName = (type) => {
   return names[type] || '未知'
 }
 
+const getFactionName = (faction) => {
+  const names = {
+    swadia: '斯瓦迪亚王国',
+    vaegir: '维吉亚王国',
+    nord: '诺德王国',
+    rhodok: '罗多克王国',
+    khergit: '库吉特汗国',
+    sarranid: '萨兰德苏丹国',
+  }
+  return names[faction] || '未知'
+}
+
 const canTravel = () => {
   return selectedLocation.value && selectedLocation.value.location_id !== currentLocation.value
+}
+
+const isAtSelectedLocation = () => {
+  return selectedLocation.value && selectedLocation.value.location_id === currentLocation.value
+}
+
+const isTravelingToSelected = () => {
+  if (!selectedLocation.value || !playerLocation.value) return false
+  return playerLocation.value.travel_destination === selectedLocation.value.location_id
 }
 
 const selectLocation = (loc) => {
@@ -105,16 +178,44 @@ const selectLocation = (loc) => {
 
 const handleTravel = () => {
   if (!selectedLocation.value) return
+  if (!gameStore.lockAction('travel')) {
+    ElMessage.warning('请勿频繁操作')
+    return
+  }
+  gameStore.setButtonLoading('travel', true)
   gameStore.send({ 
     type: 'map_travel', 
     data: { destination: selectedLocation.value.location_id } 
   })
   detailVisible.value = false
+  setTimeout(() => {
+    gameStore.unlockAction('travel')
+    gameStore.setButtonLoading('travel', false)
+  }, 500)
+}
+
+const handleEnterLocation = () => {
+  if (!selectedLocation.value) return
+  if (!gameStore.lockAction('enter')) {
+    ElMessage.warning('请勿频繁操作')
+    return
+  }
+  gameStore.setButtonLoading('enter', true)
+  gameStore.send({ 
+    type: 'enter_location', 
+    data: { location_id: selectedLocation.value.location_id } 
+  })
+  detailVisible.value = false
+  setTimeout(() => {
+    gameStore.unlockAction('enter')
+    gameStore.setButtonLoading('enter', false)
+  }, 500)
 }
 
 const loadLocations = () => {
   gameStore.send({ type: 'get_map_locations' })
   gameStore.send({ type: 'get_map_player' })
+  gameStore.send({ type: 'get_map_players' })
 }
 
 const handleWsMessage = (msg) => {
@@ -122,9 +223,54 @@ const handleWsMessage = (msg) => {
     locations.value = msg.data || []
   } else if (msg.type === 'map_player') {
     currentLocation.value = msg.data.location_id
-    playerLocation.value = locations.value.find(l => l.location_id === currentLocation.value)
+    playerLocation.value = {
+      x: msg.data.x,
+      y: msg.data.y,
+      travel_destination: msg.data.travel_destination,
+      travel_progress: msg.data.travel_progress,
+    }
+    const loc = locations.value.find(l => l.location_id === currentLocation.value)
+    if (loc) {
+      playerLocation.value.name = loc.name
+    }
+  } else if (msg.type === 'map_players') {
+    otherPlayers.value = msg.data || []
+  } else if (msg.type === 'player_position_update') {
+    // 实时位置更新
+    const player = msg.data
+    const idx = otherPlayers.value.findIndex(p => p.user_id === player.user_id)
+    if (idx >= 0) {
+      otherPlayers.value[idx] = player
+    } else {
+      otherPlayers.value.push(player)
+    }
+  } else if (msg.type === 'player_left') {
+    // 玩家离开
+    otherPlayers.value = otherPlayers.value.filter(p => p.user_id !== msg.data.user_id)
   } else if (msg.type === 'action_result') {
-    if (msg.data?.success) {
+    if (msg.action === 'map_travel' && msg.data?.success) {
+      ElMessage.success(msg.data.message)
+      startTravelProgress()
+    } else if (msg.action === 'map_arrive' && msg.data?.success) {
+      ElMessage.success(`已到达${msg.data.location_name}`)
+      currentLocation.value = msg.data.location_id
+      playerLocation.value = {
+        x: msg.data.x,
+        y: msg.data.y,
+        name: msg.data.location_name,
+        travel_destination: '',
+        travel_progress: 0,
+      }
+      stopTravelProgress()
+    } else if (msg.action === 'enter_location' && msg.data?.success) {
+      ElMessage.success(msg.data.message)
+      router.push({
+        path: '/location',
+        query: {
+          location_id: msg.data.location.location_id,
+        }
+      })
+    } else if (msg.data?.success) {
       ElMessage.success(msg.data.message)
       loadLocations()
     } else {
@@ -136,16 +282,66 @@ const handleWsMessage = (msg) => {
   }
 }
 
-onMounted(() => {
+// 旅行进度轮询
+let travelProgressTimer = null
+const startTravelProgress = () => {
+  if (travelProgressTimer) return
+  travelProgressTimer = setInterval(() => {
+    if (!playerLocation.value || !playerLocation.value.travel_destination) {
+      stopTravelProgress()
+      return
+    }
+    gameStore.send({ type: 'get_map_player' })
+    gameStore.send({ type: 'map_arrive' })
+  }, 1000)
+}
+
+const stopTravelProgress = () => {
+  if (travelProgressTimer) {
+    clearInterval(travelProgressTimer)
+    travelProgressTimer = null
+  }
+}
+
+// 定时发送位置更新请求 (每2秒)
+let positionUpdateTimer = null
+const startPositionUpdates = () => {
+  if (positionUpdateTimer) return
+  positionUpdateTimer = setInterval(() => {
+    if (gameStore.connected && playerLocation.value) {
+      gameStore.send({ type: 'update_map_position' })
+    }
+  }, 2000)
+}
+
+const stopPositionUpdates = () => {
+  if (positionUpdateTimer) {
+    clearInterval(positionUpdateTimer)
+    positionUpdateTimer = null
+  }
+}
+
+onMounted(async () => {
+  if (!gameStore.token) {
+    router.push('/')
+    return
+  }
+  if (!gameStore.connected) {
+    await gameStore.connectWs()
+  }
+  await iconStore.loadConfig()
   gameStore.wsMessageHandlers = gameStore.wsMessageHandlers || {}
   gameStore.wsMessageHandlers['map'] = handleWsMessage
   loadLocations()
+  startPositionUpdates()
 })
 
 onUnmounted(() => {
   if (gameStore.wsMessageHandlers && gameStore.wsMessageHandlers['map']) {
     delete gameStore.wsMessageHandlers['map']
   }
+  stopPositionUpdates()
+  stopTravelProgress()
 })
 </script>
 
@@ -289,9 +485,9 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.marker-coord {
+.marker-type {
   font-size: 9px;
-  color: #8fbc8f;
+  color: #d4a464;
   margin-top: 2px;
 }
 
@@ -306,6 +502,26 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  z-index: 100;
+}
+
+.player-icon-img {
+  width: 32px;
+  height: 32px;
+}
+
+.player-icon-emoji {
+  font-size: 28px;
+}
+
+.player-label {
+  font-size: 11px;
+  color: #ffd700;
+  background: rgba(139, 0, 0, 0.8);
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
 .player-coord {
@@ -315,6 +531,27 @@ onUnmounted(() => {
   padding: 2px 4px;
   border-radius: 3px;
   margin-top: 2px;
+}
+
+.other-player-marker {
+  position: absolute;
+  font-size: 20px;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 50;
+  cursor: pointer;
+}
+
+.other-player-marker .player-label {
+  font-size: 10px;
+  color: #fff;
+  background: rgba(0, 100, 200, 0.8);
+}
+
+.other-player-marker:hover {
+  z-index: 200;
 }
 
 .location-detail p {

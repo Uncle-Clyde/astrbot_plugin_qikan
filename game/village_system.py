@@ -259,7 +259,7 @@ VILLAGE_QUESTS: list[VillageQuest] = [
 ]
 
 
-def get_quests_for_player(fame: int, favor: int, difficulty: str = None) -> list[VillageQuest]:
+def get_quests_for_player(fame: int, favor: int, difficulty: str | None = None) -> list[VillageQuest]:
     """根据玩家名望和好感获取可接任务。"""
     available = []
     for quest in VILLAGE_QUESTS:
@@ -444,6 +444,22 @@ def get_available_quests_for_gifts(gift_ids: list[str], player_fame: int) -> lis
                 available.append(quest)
     
     return available
+
+
+def get_gift_category(gift_id: str) -> str:
+    """获取礼物等级分类。"""
+    gift = GIFT_ITEMS.get(gift_id)
+    if not gift:
+        return "unknown"
+    value = gift.value
+    if value <= 30:
+        return "common"
+    elif value <= 80:
+        return "medium"
+    elif value <= 150:
+        return "advanced"
+    else:
+        return "rare"
 
 
 def get_gift_suggestions(quest: VillageQuest) -> list[str]:

@@ -503,6 +503,7 @@ class DungeonManager:
 
         enemy_type = "monster" if danger == "monster" else "enemy"
         combat = self._generate_enemy(player, layer, enemy_type)
+        self._apply_combat_bonuses(player, combat)
         session.combat = combat
         session.status = "combat"
         session.message = f"遭遇{combat.enemy_name}（{combat.enemy_realm_name}）！"
@@ -795,6 +796,15 @@ class DungeonManager:
             round_number=0,
             max_rounds=COMBAT_MAX_ROUNDS,
         )
+
+    def _apply_combat_bonuses(self, player: Player, state: CombatState):
+        """应用同伴和部队战斗加成。"""
+        bonuses = CombatEngine._get_combat_bonuses(player)
+        state.player_attack += bonuses["attack"]
+        state.player_defense += bonuses["defense"]
+        state.player_hp += bonuses["hp"]
+        state.player_max_hp += bonuses["hp"]
+        state.player_crit_chance += bonuses["crit"] / 100.0
 
     async def _generate_layer_reward(self, player: Player,
                                      layer: int) -> dict:

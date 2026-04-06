@@ -13,6 +13,11 @@ from ..game.constants import get_realm_name
 from ..game.engine import GameEngine
 from ..game.models import Player
 from ..game.sect import ROLE_NAMES
+from ..game.spawn_system import (
+    get_all_spawn_origins,
+    get_all_spawn_locations,
+    get_spawn_locations_by_faction,
+)
 from ..game import mb_skills
 from .access_guard import get_access_guard
 
@@ -44,6 +49,7 @@ _PENDING_DEATH_ALLOWED_TYPES = {
     "get_scenes",
     "get_shop",
     "get_world_chat_history",
+    "get_town_menu",
     "dungeon_state",
     "market_fee_preview",
     "pvp_state",
@@ -65,6 +71,11 @@ class ConnectionManager:
         # 世界频道
         self._world_chat_cooldowns: dict[str, float] = {}  # user_id -> last_send_ts
         self._chat_cleanup_task: asyncio.Task | None = None
+        # 玩家位置管理
+        from ..game.map_system import get_position_manager
+        self._position_manager = get_position_manager()
+        self._position_update_cooldowns: dict[str, float] = {}  # user_id -> last_update_ts
+        self._position_throttle = 0.5  # 位置更新节流: 0.5秒
 
     async def connect(self, user_id: str, websocket: WebSocket):
         self._connections[user_id] = websocket
@@ -73,6 +84,19 @@ class ConnectionManager:
         self._connections.pop(user_id, None)
         self._market_pages.pop(user_id, None)
         self._market_my_watchers.discard(user_id)
+        # 移除玩家位置缓存
+        self._position_manager.remove_player(user_id)
+        self._position_update_cooldowns.pop(user_id, None)
+        
+        # 广播玩家离开给附近的人
+        nearby_users = self._position_manager.broadcast_to_nearby(user_id, 150)
+        for uid in nearby_users:
+            if uid != user_id:
+                import asyncio
+                asyncio.create_task(self.send_to_player(uid, {
+                    "type": "player_left",
+                    "data": {"user_id": user_id}
+                }))
 
     def online_count(self) -> int:
         return len(self._connections)
@@ -482,6 +506,9 @@ def create_ws_router(
                         pass
                     continue
                 if result and result.get("type") != "noop":
+                    request_id = msg.get("requestId")
+                    if request_id:
+                        result["requestId"] = request_id
                     await websocket.send_json(result)
 
         except WebSocketDisconnect:
@@ -698,9 +725,34 @@ async def _handle_message(
         announcements = await engine.get_active_announcements()
         return {"type": "announcements", "data": announcements}
 
+    elif msg_type == "get_about_page":
+        data = await engine.get_about_page()
+        return {"type": "about_page", "data": data}
+
+    elif msg_type == "get_spawn_origins":
+        origins = get_all_spawn_origins()
+        return {"type": "spawn_origins", "data": origins}
+
+    elif msg_type == "get_spawn_locations":
+        locations = get_all_spawn_locations()
+        return {"type": "spawn_locations", "data": locations}
+
+    elif msg_type == "get_spawn_locations_by_faction":
+        faction = msg.get("data", {}).get("faction")
+        if faction is None:
+            return {"type": "error", "message": "请指定阵营"}
+        locations = get_spawn_locations_by_faction(faction)
+        return {"type": "spawn_locations", "data": locations}
+
     elif msg_type == "breakthrough":
         result = await engine.breakthrough(user_id)
         return {"type": "action_result", "action": "breakthrough", "data": result}
+
+    elif msg_type == "set_spawn_origin":
+        spawn_origin = msg.get("data", {}).get("origin", "")
+        spawn_location = msg.get("data", {}).get("location", "")
+        result = await engine.set_spawn_origin(user_id, spawn_origin, spawn_location)
+        return {"type": "action_result", "action": "set_spawn_origin", "data": result}
 
     elif msg_type == "use_item":
         item_id = msg.get("data", {}).get("item_id", "")
@@ -739,18 +791,23 @@ async def _handle_message(
 
     # ==================== 地图相关 ====================
     elif msg_type == "get_map_locations":
-        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS
+        from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS, LocationType
         all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
         locations = []
         for loc_id, loc in all_locations.items():
+            try:
+                type_val = int(loc.location_type)
+                type_name = LocationType(type_val).name if 0 <= type_val <= 3 else str(type_val)
+            except (ValueError, AttributeError):
+                type_name = str(loc.location_type)
             locations.append({
-                "location_id": loc_id,
-                "name": loc["name"],
-                "type": loc["type"],
-                "x": loc["x"],
-                "y": loc["y"],
-                "description": loc.get("description", ""),
-                "faction": loc.get("faction", ""),
+                "location_id": loc.location_id,
+                "name": loc.name,
+                "type": type_name,
+                "x": loc.x,
+                "y": loc.y,
+                "description": loc.description,
+                "faction": str(loc.faction) if loc.faction else "",
             })
         return {"type": "map_locations", "data": locations}
 
@@ -768,6 +825,95 @@ async def _handle_message(
             "travel_destination": map_state.travel_destination,
             "travel_progress": map_state.travel_progress,
         }}
+
+    elif msg_type == "get_map_players":
+        # 使用位置管理器获取附近玩家 (默认150单位范围)
+        nearby_radius = msg.get("data", {}).get("radius", 150)
+        
+        if ws_manager:
+            # 先尝试从缓存获取附近玩家
+            player_pos = ws_manager._position_manager.get_player(user_id)
+            if player_pos:
+                nearby = ws_manager._position_manager.get_nearby_players(user_id, nearby_radius)
+            else:
+                # 玩家不在缓存中，返回所有在线玩家
+                nearby = ws_manager._position_manager.get_all_positions()
+                nearby = [p for p in nearby if p["user_id"] != user_id]
+        else:
+            nearby = []
+        
+        return {"type": "map_players", "data": nearby}
+
+    elif msg_type == "update_map_position":
+        # 更新玩家位置 (节流处理)
+        import time
+        current_time = time.time()
+        
+        if not ws_manager:
+            return None
+        
+        last_update = ws_manager._position_update_cooldowns.get(user_id, 0)
+        
+        if current_time - last_update < ws_manager._position_throttle:
+            return None  # 忽略频繁更新
+        
+        ws_manager._position_update_cooldowns[user_id] = current_time
+        
+        # 获取玩家位置信息
+        player = await engine.get_player(user_id)
+        if not player:
+            return {"type": "error", "message": "角色不存在"}
+        
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        if not map_state:
+            return {"type": "error", "message": "地图状态异常"}
+        
+        x = map_state.x
+        y = map_state.y
+        
+        # 获取玩家图标
+        icon = "👤"
+        try:
+            from ..game.renderer import get_player_display_icon
+            icon = get_player_display_icon(player)
+        except Exception:
+            pass
+        
+        # 获取境界名称
+        realm_name = "平民"
+        try:
+            from ..game.constants import get_realm_name
+            realm_name = get_realm_name(player.realm)
+        except Exception:
+            pass
+        
+        # 更新位置缓存
+        ws_manager._position_manager.update_position(
+            user_id, player.name, x, y,
+            player.realm, realm_name, icon
+        )
+        
+        # 广播给附近玩家
+        nearby_users = ws_manager._position_manager.broadcast_to_nearby(user_id, 150)
+        
+        broadcast_data = {
+            "type": "player_position_update",
+            "data": {
+                "user_id": user_id,
+                "name": player.name,
+                "x": x,
+                "y": y,
+                "realm": player.realm,
+                "realm_name": realm_name,
+                "icon": icon,
+            }
+        }
+        
+        for uid in nearby_users:
+            if uid != user_id:
+                await ws_manager.send_to_player(uid, broadcast_data)
+        
+        return {"type": "position_updated", "data": {"x": x, "y": y}}
 
     elif msg_type == "map_travel":
         destination = msg.get("data", {}).get("destination", "")
@@ -788,13 +934,131 @@ async def _handle_message(
         map_state.travel_destination = destination
         map_state.travel_progress = 0
         map_state.travel_time = calculate_map_travel_time(
-            map_state.x, map_state.y, dest_loc["x"], dest_loc["y"]
+            map_state.x, map_state.y, dest_loc.x, dest_loc.y
         )
         
         return {"type": "action_result", "action": "map_travel", "data": {
             "success": True,
-            "message": f"开始前往{dest_loc['name']}，预计{map_state.travel_time}秒到达"
+            "message": f"开始前往{dest_loc.name}，预计{map_state.travel_time}秒到达"
         }}
+
+    elif msg_type == "map_arrive":
+        player = await engine.get_player(user_id)
+        if not player:
+            return {"type": "error", "message": "角色不存在"}
+        
+        map_state = player.map_state if hasattr(player, 'map_state') else None
+        if not map_state or not map_state.travel_destination:
+            return {"type": "error", "message": "没有在旅行中"}
+        
+        from ..game.map_system import arrive_at_location
+        result = arrive_at_location(map_state, map_state.travel_destination)
+        
+        if result.get("success"):
+            await engine._save_player(player)
+        
+        return {"type": "action_result", "action": "map_arrive", "data": result}
+
+    elif msg_type == "enter_location":
+        location_id = msg.get("data", {}).get("location_id", "")
+        if not location_id:
+            return {"type": "error", "message": "需要location_id"}
+        result = await engine.enter_location(user_id, location_id)
+        return {"type": "action_result", "action": "enter_location", "data": result}
+
+    elif msg_type == "leave_location":
+        result = await engine.leave_location(user_id)
+        return {"type": "action_result", "action": "leave_location", "data": result}
+
+    elif msg_type == "get_town_menu":
+        location_id = msg.get("data", {}).get("location_id", "")
+        if not location_id:
+            return {"type": "error", "message": "需要location_id"}
+        result = await engine.get_town_menu(user_id, location_id)
+        return {"type": "town_menu", "data": result}
+
+    elif msg_type == "town_menu_action":
+        data = msg.get("data", {})
+        action_id = data.get("action_id", "")
+        location_id = data.get("location_id", "")
+        npc_id = data.get("npc_id", "")
+        if not action_id or not location_id:
+            return {"type": "error", "message": "需要action_id和location_id"}
+        result = await engine.town_menu_action(user_id, action_id, location_id, npc_id)
+        return {"type": "action_result", "action": "town_menu_action", "data": result}
+
+    elif msg_type == "get_village_industries":
+        village_id = msg.get("data", {}).get("village_id", "")
+        if not village_id:
+            return {"type": "error", "message": "需要village_id"}
+        result = await engine.get_village_industries(user_id, village_id)
+        return {"type": "action_result", "action": "get_village_industries", "data": result}
+
+    elif msg_type == "build_industry":
+        data = msg.get("data", {})
+        village_id = data.get("village_id", "")
+        industry_id = data.get("industry_id", "")
+        if not village_id or not industry_id:
+            return {"type": "error", "message": "需要village_id和industry_id"}
+        result = await engine.build_village_industry(user_id, village_id, industry_id)
+        return {"type": "action_result", "action": "build_industry", "data": result}
+
+    elif msg_type == "upgrade_industry":
+        data = msg.get("data", {})
+        village_id = data.get("village_id", "")
+        industry_id = data.get("industry_id", "")
+        if not village_id or not industry_id:
+            return {"type": "error", "message": "需要village_id和industry_id"}
+        result = await engine.upgrade_village_industry(user_id, village_id, industry_id)
+        return {"type": "action_result", "action": "upgrade_industry", "data": result}
+
+    elif msg_type == "collect_industry_income":
+        village_id = msg.get("data", {}).get("village_id", "")
+        if not village_id:
+            return {"type": "error", "message": "需要village_id"}
+        result = await engine.collect_industry_income(user_id, village_id)
+        return {"type": "action_result", "action": "collect_industry_income", "data": result}
+
+    elif msg_type == "repair_industry":
+        data = msg.get("data", {})
+        village_id = data.get("village_id", "")
+        industry_id = data.get("industry_id", "")
+        if not village_id or not industry_id:
+            return {"type": "error", "message": "需要village_id和industry_id"}
+        result = await engine.repair_industry_action(user_id, village_id, industry_id)
+        return {"type": "action_result", "action": "repair_industry", "data": result}
+
+    elif msg_type == "rest_at_settlement":
+        result = await engine.rest_at_settlement(user_id)
+        return {"type": "action_result", "action": "rest_at_settlement", "data": result}
+
+    elif msg_type == "heal_troops":
+        result = await engine.heal_troops(user_id)
+        return {"type": "action_result", "action": "heal_troops", "data": result}
+
+    elif msg_type == "tournament_combat":
+        data = msg.get("data", {})
+        result = await engine.tournament_combat_action(user_id, data.get("action", "attack"), data)
+        return {"type": "action_result", "action": "tournament_combat", "data": result}
+
+    elif msg_type == "start_npc_dialog":
+        npc_id = msg.get("data", {}).get("npc_id", "")
+        if not npc_id:
+            return {"type": "error", "message": "需要npc_id"}
+        result = await engine.start_npc_dialog(user_id, npc_id)
+        return {"type": "action_result", "action": "start_npc_dialog", "data": result}
+
+    elif msg_type == "give_gift_to_npc":
+        npc_id = msg.get("data", {}).get("npc_id", "")
+        gift_id = msg.get("data", {}).get("gift_id", "")
+        if not npc_id or not gift_id:
+            return {"type": "error", "message": "需要npc_id和gift_id"}
+        result = await engine.give_gift(user_id, npc_id, gift_id)
+        return {"type": "action_result", "action": "give_gift_to_npc", "data": result}
+
+    elif msg_type == "get_gift_list":
+        result = await engine.get_gift_list(user_id)
+        return {"type": "gift_list", "data": result}
 
     elif msg_type == "get_rankings":
         return {"type": "rankings_data", "data": _build_rankings_payload(engine, user_id)}
@@ -876,6 +1140,21 @@ async def _handle_message(
         result = await engine.recycle_action(user_id, item_id, count)
         return {"type": "action_result", "action": "recycle", "data": result}
 
+    # ── 音效系统 ─────────────────────────────────────────────
+    elif msg_type == "get_audio_config":
+        data = await engine.get_audio_config()
+        return {"type": "audio_config", "data": data}
+
+    elif msg_type == "update_audio_settings":
+        data = msg.get("data", {})
+        result = await engine.update_audio_settings(
+            enabled=data.get("enabled"),
+            music_enabled=data.get("music_enabled"),
+            sound_volume=data.get("sound_volume"),
+            music_volume=data.get("music_volume"),
+        )
+        return {"type": "action_result", "action": "update_audio_settings", "data": result}
+
     # ── 天机阁（商店） ──────────────────────────────────────
     elif msg_type == "get_shop":
         data = await engine.shop_get_items(user_id)
@@ -892,6 +1171,31 @@ async def _handle_message(
             return {"type": "error", "message": "购买数量至少为1"}
         result = await engine.shop_buy(user_id, item_id, quantity)
         return {"type": "action_result", "action": "shop_buy", "data": result}
+
+    # ── 铁匠铺 ──────────────────────────────────────────────
+    elif msg_type == "blacksmith_info":
+        data = msg.get("data", {})
+        item_id = data.get("item_id", "")
+        if not item_id:
+            return {"type": "error", "message": "请指定装备"}
+        result = await engine.get_item_prefix_info(user_id, item_id)
+        return {"type": "blacksmith_info", "data": result}
+
+    elif msg_type == "blacksmith_repair":
+        item_id = msg.get("data", {}).get("item_id", "")
+        if not item_id:
+            return {"type": "error", "message": "请指定装备"}
+        result = await engine.blacksmith_repair_prefix(user_id, item_id)
+        return {"type": "action_result", "action": "blacksmith_repair", "data": result}
+
+    elif msg_type == "blacksmith_enhance":
+        data = msg.get("data", {})
+        item_id = data.get("item_id", "")
+        target_quality = data.get("target_quality", "good")
+        if not item_id:
+            return {"type": "error", "message": "请指定装备"}
+        result = await engine.blacksmith_enhance_prefix(user_id, item_id, target_quality)
+        return {"type": "action_result", "action": "blacksmith_enhance", "data": result}
 
     # ── 坊市 ──────────────────────────────────────────────
     elif msg_type == "market_list":
@@ -1039,6 +1343,10 @@ async def _handle_message(
         if not player:
             return {"type": "error", "message": "角色不存在"}
         result = await engine.dungeon.advance(player)
+        if result.get("success"):
+            completed_tasks = await engine._auto_update_task_progress(user_id, "adventure")
+            if completed_tasks:
+                result["task_completed"] = completed_tasks
         if result.get("pvp_notice") and ws_manager and result.get("pvp_opponent_id"):
             await ws_manager.send_to_player(result["pvp_opponent_id"], {
                 "type": "pvp_challenge_notice",
@@ -1092,6 +1400,10 @@ async def _handle_message(
             return {"type": "pvp_update", "data": result}
         if result.get("resolved") and ws_manager:
             await _broadcast_pvp_result(engine, ws_manager, result)
+            if result.get("winner_id") == user_id:
+                completed_tasks = await engine._auto_update_task_progress(user_id, "pvp")
+                if completed_tasks:
+                    result["task_completed"] = completed_tasks
             return {"type": "noop"}
         return {"type": "action_result", "action": "pvp_action", "data": result}
 
@@ -1298,6 +1610,76 @@ async def _handle_message(
         is_item = raw_is_item is True or (isinstance(raw_is_item, str) and raw_is_item.lower() in ("true", "1"))
         result = await engine.sect_set_exchange_rule(user_id, target_key, points, is_item=is_item)
         return {"type": "action_result", "action": "sect_set_exchange_rule", "data": result}
+
+    # ── 家族任务 API ──────────────────────────────────────
+    elif msg_type == "sect_create_task":
+        d = msg.get("data", {})
+        title = str(d.get("title", "")).strip()
+        if not title:
+            return {"type": "error", "message": "请输入任务标题"}
+        description = str(d.get("description", "")).strip()
+        task_type = str(d.get("task_type", "")).strip()
+        if not task_type:
+            return {"type": "error", "message": "请选择任务类型"}
+        try:
+            target_count = max(1, int(d.get("target_count", 1)))
+            reward_points = max(0, int(d.get("reward_points", 0)))
+            reward_item_count = max(0, int(d.get("reward_item_count", 0)))
+            expires_hours = max(0, int(d.get("expires_hours", 24)))
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "参数必须是整数"}
+        result = await engine.sect_create_task(
+            user_id=user_id,
+            title=title,
+            description=description,
+            task_type=task_type,
+            target_count=target_count,
+            reward_points=reward_points,
+            reward_item_id=d.get("reward_item_id", ""),
+            reward_item_count=reward_item_count,
+            expires_hours=expires_hours,
+        )
+        return {"type": "action_result", "action": "sect_create_task", "data": result}
+
+    elif msg_type == "sect_get_tasks":
+        d = msg.get("data", {})
+        status = str(d.get("status", "")).strip()
+        result = await engine.sect_get_tasks(user_id, status)
+        return {"type": "sect_tasks_data", "data": result}
+
+    elif msg_type == "sect_accept_task":
+        d = msg.get("data", {})
+        try:
+            task_id = int(d.get("task_id", 0))
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "任务ID无效"}
+        if task_id <= 0:
+            return {"type": "error", "message": "请指定任务"}
+        result = await engine.sect_accept_task(user_id, task_id)
+        return {"type": "action_result", "action": "sect_accept_task", "data": result}
+
+    elif msg_type == "sect_update_task_progress":
+        d = msg.get("data", {})
+        try:
+            task_id = int(d.get("task_id", 0))
+            progress = max(1, int(d.get("progress", 1)))
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "参数必须是整数"}
+        if task_id <= 0:
+            return {"type": "error", "message": "请指定任务"}
+        result = await engine.sect_update_task_progress(user_id, task_id, progress)
+        return {"type": "action_result", "action": "sect_update_task_progress", "data": result}
+
+    elif msg_type == "sect_cancel_task":
+        d = msg.get("data", {})
+        try:
+            task_id = int(d.get("task_id", 0))
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "任务ID无效"}
+        if task_id <= 0:
+            return {"type": "error", "message": "请指定任务"}
+        result = await engine.sect_cancel_task(user_id, task_id)
+        return {"type": "action_result", "action": "sect_cancel_task", "data": result}
 
     # ── 骑砍技能树 API ──────────────────────────────────
 
@@ -1541,7 +1923,11 @@ async def _handle_message(
         if not bandit_id:
             return {"type": "error", "message": "缺少劫匪ID"}
         
-        result = await engage_bandit(user_id, bandit_id)
+        player = await engine.get_player(user_id)
+        if not player:
+            return {"type": "error", "message": "玩家不存在"}
+        
+        result = await engage_bandit(player, bandit_id)
         return {"type": "bandit_attack_result", "data": result}
 
     elif msg_type == "get_bandit_info":
@@ -1576,6 +1962,247 @@ async def _handle_message(
                 "is_defeated": bandit.is_defeated,
             }
         }
+
+    # ── 医疗系统 ──────────────────────────────────────────
+    elif msg_type == "gather_herbs":
+        """采集草药"""
+        result = await engine.gather_herbs(user_id)
+        return {"type": "action_result", "action": "gather_herbs", "data": result}
+
+    elif msg_type == "use_heal_skill":
+        """使用医疗技能"""
+        skill_id = msg.get("data", {}).get("skill_id", "")
+        if not skill_id:
+            return {"type": "error", "message": "请指定医疗技能"}
+        result = await engine.use_heal_skill(user_id, skill_id)
+        return {"type": "action_result", "action": "use_heal_skill", "data": result}
+
+    elif msg_type == "get_medical_info":
+        """获取医疗系统信息"""
+        result = engine.get_medical_info(user_id)
+        return {"type": "medical_info", "data": result}
+
+    elif msg_type == "craft_item":
+        """制作物品"""
+        recipe_id = msg.get("data", {}).get("recipe_id", "")
+        if not recipe_id:
+            return {"type": "error", "message": "请指定配方"}
+        result = await engine.craft_item(user_id, recipe_id)
+        return {"type": "action_result", "action": "craft_item", "data": result}
+
+    # ── 贸易系统 ──────────────────────────────────────────
+    elif msg_type == "get_trade_goods":
+        """获取贸易商品"""
+        location_id = msg.get("data", {}).get("location_id")
+        result = engine.get_trade_list(user_id, location_id)
+        return {"type": "trade_goods", "data": result}
+
+    elif msg_type == "trade_buy":
+        """购买商品"""
+        good_id = msg.get("data", {}).get("good_id", "")
+        count = msg.get("data", {}).get("count", 1)
+        location_id = msg.get("data", {}).get("location_id")
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "数量必须是整数"}
+        if count < 1:
+            return {"type": "error", "message": "数量至少为1"}
+        result = await engine.trade_buy(user_id, good_id, count, location_id)
+        return {"type": "action_result", "action": "trade_buy", "data": result}
+
+    elif msg_type == "trade_sell":
+        """出售商品"""
+        good_id = msg.get("data", {}).get("good_id", "")
+        count = msg.get("data", {}).get("count", 1)
+        location_id = msg.get("data", {}).get("location_id")
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "数量必须是整数"}
+        if count < 1:
+            return {"type": "error", "message": "数量至少为1"}
+        result = await engine.trade_sell(user_id, good_id, count, location_id)
+        return {"type": "action_result", "action": "trade_sell", "data": result}
+
+    # ── 锻造系统 ──────────────────────────────────────────
+    elif msg_type == "get_forging_materials":
+        """获取锻造材料"""
+        result = engine.get_forging_materials(user_id)
+        return {"type": "forging_materials", "data": result}
+
+    elif msg_type == "get_forging_recipes":
+        """获取锻造配方"""
+        result = engine.get_forging_recipes(user_id)
+        return {"type": "forging_recipes", "data": result}
+
+    elif msg_type == "forge_item":
+        """锻造装备"""
+        recipe_id = msg.get("data", {}).get("recipe_id", "")
+        if not recipe_id:
+            return {"type": "error", "message": "请指定配方"}
+        result = await engine.forge_item(user_id, recipe_id)
+        return {"type": "action_result", "action": "forge_item", "data": result}
+
+    elif msg_type == "buy_forging_material":
+        """购买锻造材料"""
+        material_id = msg.get("data", {}).get("material_id", "")
+        count = msg.get("data", {}).get("count", 1)
+        try:
+            count = int(count)
+        except (TypeError, ValueError):
+            return {"type": "error", "message": "数量必须是整数"}
+        if count < 1:
+            return {"type": "error", "message": "数量至少为1"}
+        result = await engine.buy_forging_material(user_id, material_id, count)
+        return {"type": "action_result", "action": "buy_forging_material", "data": result}
+
+    # ── 狩猎系统 ──────────────────────────────────────────
+    elif msg_type == "hunt_wildlife":
+        """狩猎野生动物"""
+        wildlife_id = msg.get("data", {}).get("wildlife_id")
+        result = await engine.hunt_wildlife(user_id, wildlife_id)
+        return {"type": "action_result", "action": "hunt_wildlife", "data": result}
+
+    elif msg_type == "get_hunting_info":
+        """获取狩猎信息"""
+        result = engine.get_hunting_info(user_id)
+        return {"type": "hunting_info", "data": result}
+
+    elif msg_type == "craft_accessory":
+        """制作饰品"""
+        accessory_id = msg.get("data", {}).get("accessory_id", "")
+        if not accessory_id:
+            return {"type": "error", "message": "请指定饰品"}
+        result = await engine.craft_accessory(user_id, accessory_id)
+        return {"type": "action_result", "action": "craft_accessory", "data": result}
+
+    elif msg_type == "allocate_attribute_points":
+        """批量分配属性点"""
+        from ..game.player_level import LevelSystem
+        
+        data = msg.get("data", {})
+        strength = data.get("strength", 0)
+        intelligence = data.get("intelligence", 0)
+        agility = data.get("agility", 0)
+        
+        result = {"success": False, "message": ""}
+        total_points = strength + intelligence + agility
+        
+        if total_points == 0:
+            result = {"success": True, "message": "没有分配任何属性点"}
+        else:
+            player = await engine.get_player(user_id)
+            if not player:
+                result = {"success": False, "message": "玩家不存在"}
+            elif player.attribute_points < total_points:
+                result = {"success": False, "message": f"属性点不足，需要{total_points}点，当前有{player.attribute_points}点"}
+            else:
+                try:
+                    if strength > 0:
+                        for _ in range(strength):
+                            r = LevelSystem.allocate_attribute(player, "strength")
+                            if not r["success"]:
+                                result = r
+                                break
+                    if result.get("success", True) and intelligence > 0:
+                        for _ in range(intelligence):
+                            r = LevelSystem.allocate_attribute(player, "intelligence")
+                            if not r["success"]:
+                                result = r
+                                break
+                    if result.get("success", True) and agility > 0:
+                        for _ in range(agility):
+                            r = LevelSystem.allocate_attribute(player, "agility")
+                            if not r["success"]:
+                                result = r
+                                break
+                    
+                    if result.get("success", True):
+                        result = {
+                            "success": True, 
+                            "message": f"力量+{strength} 智力+{intelligence} 敏捷+{agility}",
+                            "data": {
+                                "strength": player.strength,
+                                "intelligence": player.intelligence,
+                                "agility": player.agility,
+                                "remaining_points": player.attribute_points
+                            }
+                        }
+                        await engine._save_player(player)
+                except Exception as e:
+                    ws_logger.error(f"[allocate_attribute_points] Error: {e}")
+                    result = {"success": False, "message": f"分配失败: {str(e)}"}
+        
+        return {"type": "action_result", "action": "allocate_attribute_points", "data": result}
+
+    elif msg_type == "allocate_skill_points":
+        """分配技能点"""
+        from ..game.player_level import LevelSystem
+        
+        data = msg.get("data", {})
+        
+        result = {"success": False, "message": ""}
+        
+        if not data:
+            result = {"success": True, "message": "没有分配任何技能点"}
+        else:
+            player = await engine.get_player(user_id)
+            if not player:
+                result = {"success": False, "message": "玩家不存在"}
+            else:
+                total_needed = sum(data.values())
+                
+                base_skill_points = (player.strength // 3) + (player.intelligence // 3) + (player.agility // 3)
+                used_skill_points = sum(player.skills.values()) if player.skills else 0
+                available = base_skill_points - used_skill_points
+                
+                if available < total_needed:
+                    result = {"success": False, "message": f"技能点不足，需要{total_needed}点，当前有{available}点"}
+                else:
+                    try:
+                        for skill_id, points in data.items():
+                            if points > 0:
+                                player.skills = player.skills or {}
+                                player.skills[skill_id] = player.skills.get(skill_id, 0) + points
+                        
+                        result = {
+                            "success": True, 
+                            "message": f"技能点分配成功! (力量:{player.strength} 敏捷:{player.agility} 智力:{player.intelligence})",
+                            "data": {
+                                "skills": player.skills,
+                            }
+                        }
+                        await engine._save_player(player)
+                    except Exception as e:
+                        ws_logger.error(f"[allocate_skill_points] Error: {e}")
+                        result = {"success": False, "message": f"分配失败: {str(e)}"}
+        
+        return {"type": "action_result", "action": "allocate_skill_points", "data": result}
+
+    elif msg_type == "get_player_skills":
+        """获取玩家技能"""
+        player = await engine.get_player(user_id)
+        if not player:
+            return {"type": "error", "message": "玩家不存在"}
+        
+        skills = []
+        if player.skills:
+            from ..game.mb_attributes import SKILL_DEFINITIONS
+            for skill_id, level in player.skills.items():
+                if skill_id in SKILL_DEFINITIONS:
+                    skill_def = SKILL_DEFINITIONS[skill_id]
+                    skills.append({
+                        "skill_id": skill_id,
+                        "name": skill_def.name,
+                        "description": skill_def.description,
+                        "effect": skill_def.effect,
+                        "icon": getattr(skill_def, 'icon', '⚔️'),
+                        "level": level,
+                        "max_level": getattr(skill_def, 'max_level', 10),
+                    })
+        
+        return {"type": "player_skills_data", "data": {"skills": skills}}
 
     else:
         return {"type": "error", "message": f"未知操作: {msg_type}"}

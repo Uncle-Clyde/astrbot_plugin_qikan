@@ -509,6 +509,25 @@ def get_inventory_display_sync(player: Player) -> list[dict]:
     for item_id, count in player.inventory.items():
         item = ITEM_REGISTRY.get(item_id)
         if not item:
+            eq = EQUIPMENT_REGISTRY.get(item_id)
+            if eq:
+                entry = {
+                    "item_id": item_id,
+                    "name": eq.name,
+                    "count": count,
+                    "type": "equipment",
+                    "description": eq.description,
+                    "tier": eq.tier,
+                    "tier_name": EQUIPMENT_TIER_NAMES.get(eq.tier, "未知"),
+                    "quality": eq.tier,
+                    "quality_name": EQUIPMENT_TIER_NAMES.get(eq.tier, "未知"),
+                    "slot": eq.slot,
+                    "attack": eq.attack,
+                    "defense": eq.defense,
+                    "element": eq.element,
+                    "element_damage": eq.element_damage,
+                }
+                result.append(entry)
             continue
         entry = {
             "item_id": item_id,
@@ -522,6 +541,8 @@ def get_inventory_display_sync(player: Player) -> list[dict]:
         if eq:
             entry["tier"] = eq.tier
             entry["tier_name"] = EQUIPMENT_TIER_NAMES.get(eq.tier, "未知")
+            entry["quality"] = eq.tier
+            entry["quality_name"] = EQUIPMENT_TIER_NAMES.get(eq.tier, "未知")
             entry["slot"] = eq.slot
             entry["attack"] = eq.attack
             entry["defense"] = eq.defense

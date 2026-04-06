@@ -176,28 +176,30 @@ class PvPManager:
         session_id = str(uuid.uuid4())[:8]
 
         def _build_state(player: Player, opponent: Player) -> CombatState:
+            from .pills import get_effective_combat_stats
+            effective_stats = get_effective_combat_stats(player)
             equip_bonus = get_equip_bonus(player)
             heart_bonus = get_heart_method_bonus(player.heart_method, player.heart_method_mastery)
             gongfa_bonus = get_total_gongfa_bonus(player)
             max_stamina = get_player_base_max_lingqi(player)
             return CombatState(
-                player_hp=player.hp,
-                player_max_hp=player.max_hp,
+                player_hp=effective_stats["hp"],
+                player_max_hp=effective_stats["max_hp"],
                 player_attack=max(
                     1,
-                    player.attack
+                    effective_stats["attack"]
                     + equip_bonus["attack"]
                     + heart_bonus["attack_bonus"]
                     + gongfa_bonus["attack_bonus"],
                 ),
                 player_defense=max(
                     1,
-                    player.defense
+                    effective_stats["defense"]
                     + equip_bonus["defense"]
                     + heart_bonus["defense_bonus"]
                     + gongfa_bonus["defense_bonus"],
                 ),
-                player_lingqi=min(player.lingqi, max_stamina),
+                player_lingqi=min(effective_stats["lingqi"], max_stamina),
                 player_max_lingqi=max_stamina,
                 enemy_name=opponent.name,
                 enemy_type="player",
@@ -708,7 +710,7 @@ class PvPManager:
         raw_action = action.get("action", "attack")
         
         # 骑砍风格动作处理
-        if raw_action == CombatAction.DEFEND:
+        if raw_action == "defend":
             stamina_regen = int(state.player_max_lingqi * 0.15)
             return {
                 "attack_power": 0,
@@ -718,7 +720,7 @@ class PvPManager:
                 "summary": "举盾防御（体力+15%）",
             }
         
-        if raw_action == CombatAction.CHARGE:
+        if raw_action == "charge":
             state.player_lingqi = max(0, state.player_lingqi - 20)
             charge_bonus = int(state.player_attack * 1.5)
             return {
@@ -729,28 +731,7 @@ class PvPManager:
                 "summary": "冲锋！威力翻倍但消耗20体力",
             }
         
-        if raw_action == CombatAction.FEINT:
-            state.player_lingqi = max(0, state.player_lingqi - 15)
-            return {
-                "attack_power": int(state.player_attack * 0.6),
-                "defending": False,
-                "heal": 0,
-                "lingqi_regen": 0,
-                "summary": "虚晃一招（下回合攻击+50%）",
-                "feint_next": True,
-            }
-        
-        if raw_action == CombatAction.BATTLE_CRY:
-            state.player_lingqi = max(0, state.player_lingqi - 25)
-            return {
-                "attack_power": int(state.player_attack * 0.8),
-                "defending": False,
-                "heal": 0,
-                "lingqi_regen": int(state.player_max_lingqi * 0.2),
-                "summary": "战吼震慑！体力+20%，下回合先手",
-            }
-        
-        if raw_action == CombatAction.BERSERK:
+        if raw_action == "berserk":
             state.player_lingqi = max(0, state.player_lingqi - 30)
             berserk_attack = int(state.player_attack * 2.0)
             return {

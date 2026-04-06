@@ -1,0 +1,1916 @@
+{
+  "version": "1.0.0",
+  "npcs": {
+    "mayor_suno": {
+      "name": "海尔姆",
+      "title": "苏诺城镇长",
+      "icon": "👨‍💼",
+      "description": "一位睿智的长者，管理着这座商业城市",
+      "npc_type": "mayor",
+      "personality": "friendly",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "欢迎来到苏诺，冒险者。我是镇长海尔姆，管理着这座商业城市。有什么我能帮你的吗？",
+          "options": [
+            {
+              "option_id": "opt_quests",
+              "text": "有什么任务吗？",
+              "next_node": "quest_menu",
+              "action": "show_quests",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_info",
+              "text": "介绍一下这里",
+              "next_node": "location_info",
+              "action": "show_info",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "quest_menu": {
+          "node_id": "quest_menu",
+          "text": "我这里有几个任务，你看看能帮上忙吗？完成任务会有丰厚的奖励。",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "让我看看",
+              "next_node": "quest_list",
+              "action": "show_quest_list",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "quest_list": {
+          "node_id": "quest_list",
+          "text": "这是目前可接的任务列表，选择一个你感兴趣的吧。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "好的，我知道了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "location_info": {
+          "node_id": "location_info",
+          "text": "苏诺是维吉亚王国北部的重要城市，商业繁荣，往来商人络绎不绝。这里税率较低，是贸易的好去处。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢介绍",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "感谢你的帮助，我们的关系越来越好了。希望以后能继续合作。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "我会继续努力的",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？你要送我什么？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "太感谢了！这正是我喜欢的！我们的关系更近了。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢你的礼物，我收下了。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "嗯...这个...谢谢你的好意。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉，下次我会注意",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "祝你好运，冒险者。愿卡拉迪亚的风指引你的道路。",
+          "options": []
+        }
+      }
+    },
+    "merchant_town": {
+      "name": "法提玛",
+      "title": "城镇商人",
+      "icon": "🛒",
+      "description": "来自远方的精明商人，商品琳琅满目",
+      "npc_type": "merchant",
+      "personality": "friendly",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "欢迎来到我的商店，朋友！这里有你需要的各种商品。",
+          "options": [
+            {
+              "option_id": "opt_shop",
+              "text": "看看你的商品",
+              "next_node": "shop_view",
+              "action": "open_shop",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "shop_view": {
+          "node_id": "shop_view",
+          "text": "请随意挑选，价格好商量！",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "让我看看",
+              "next_node": "shop_open",
+              "action": "open_shop",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "shop_open": {
+          "node_id": "shop_open",
+          "text": "这是当前的商品列表。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "好的，我知道了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？你要送我什么？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "太棒了！作为回报，我可以给你一些折扣！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢你的礼物。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "嗯...这个...好吧，谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "我们的关系不错！如果你经常光顾我的店，我会给你更好的价格。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "我会的",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "下次再来啊！我会有更多好货！",
+          "options": []
+        }
+      }
+    },
+    "blacksmith_town": {
+      "name": "安德森",
+      "title": "铁匠",
+      "icon": "🔨",
+      "description": "技艺精湛的铁匠，能修理和强化装备",
+      "npc_type": "blacksmith",
+      "personality": "neutral",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "铁匠铺。武器和装备的修理、强化都可以找我。",
+          "options": [
+            {
+              "option_id": "opt_repair",
+              "text": "修理装备",
+              "next_node": "repair_view",
+              "action": "open_blacksmith",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_enhance",
+              "text": "强化装备",
+              "next_node": "enhance_view",
+              "action": "open_blacksmith",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "repair_view": {
+          "node_id": "repair_view",
+          "text": "把损坏的装备拿来，我帮你修好。",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "好的",
+              "next_node": "repair_open",
+              "action": "open_blacksmith",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "repair_open": {
+          "node_id": "repair_open",
+          "text": "选择需要修理的装备。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "知道了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "enhance_view": {
+          "node_id": "enhance_view",
+          "text": "强化装备需要一些材料，你准备好了吗？",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "准备好了",
+              "next_node": "enhance_open",
+              "action": "open_blacksmith",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "下次吧",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "enhance_open": {
+          "node_id": "enhance_open",
+          "text": "选择要强化的装备。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "知道了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？你要送我什么？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "好礼物！下次来修理我给你打折！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "哼...勉强收下吧。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "我们的关系不错。你的装备我会用心修理的。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "拜托了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "武器保养好，战场上才能保命。再见。",
+          "options": []
+        }
+      }
+    },
+    "tavern_town": {
+      "name": "罗莎",
+      "title": "酒馆老板",
+      "icon": "🍺",
+      "description": "热情开朗的酒馆老板，消息灵通",
+      "npc_type": "tavern_keeper",
+      "personality": "friendly",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "欢迎来到酒馆！来一杯？消息和美酒这里都有。",
+          "options": [
+            {
+              "option_id": "opt_rest",
+              "text": "休息一下",
+              "next_node": "rest_view",
+              "action": "rest",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_rumor",
+              "text": "有什么消息吗？",
+              "next_node": "rumor_view",
+              "action": "show_rumor",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "请你喝一杯",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "rest_view": {
+          "node_id": "rest_view",
+          "text": "好好休息，恢复体力。一杯麦酒只要几个第纳尔。",
+          "options": [
+            {
+              "option_id": "opt_rest_confirm",
+              "text": "来一杯",
+              "next_node": "rest_confirm",
+              "action": "rest",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "rest_confirm": {
+          "node_id": "rest_confirm",
+          "text": "干杯！感觉好多了吧？",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "确实",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "rumor_view": {
+          "node_id": "rumor_view",
+          "text": "我听说最近有些不太平...具体嘛，你懂的。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？请我喝什么？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，下次吧",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "太棒了！这酒真不错！来，我告诉你一些内部消息！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢！",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢你的请客！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "嗯...这个口味有点特别...谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "我们是好朋友了！以后来我这里，我给你最好的酒！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "太好了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "慢走啊！下次再来喝酒！",
+          "options": []
+        }
+      }
+    },
+    "guard_town": {
+      "name": "雷纳德",
+      "title": "守卫队长",
+      "icon": "🛡️",
+      "description": "严肃的守卫队长，负责城镇安全",
+      "npc_type": "guard_captain",
+      "personality": "grumpy",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "城镇的守卫。保持警惕，这里并不太平。",
+          "options": [
+            {
+              "option_id": "opt_info",
+              "text": "周边安全情况如何？",
+              "next_node": "security_info",
+              "action": "show_info",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "security_info": {
+          "node_id": "security_info",
+          "text": "最近劫匪活动频繁，外出要小心。我会加强巡逻的。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢提醒",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？你要送我什么？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "好！我会记住你的。有需要帮忙的时候尽管说。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "哼...不需要这些。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "我们是战友了。在这里，你可以信任我。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "注意安全，冒险者。",
+          "options": []
+        }
+      }
+    },
+    "elder_village": {
+      "name": "村长",
+      "title": "村长",
+      "icon": "👴",
+      "description": "德高望重的村长，管理着这个村庄",
+      "npc_type": "village_elder",
+      "personality": "friendly",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "欢迎来到我们村庄，远方的客人。我们是个小村庄，但村民们都很热情。",
+          "options": [
+            {
+              "option_id": "opt_quests",
+              "text": "有什么需要帮忙的吗？",
+              "next_node": "quest_menu",
+              "action": "show_quests",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_info",
+              "text": "介绍一下村庄",
+              "next_node": "village_info",
+              "action": "show_info",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "quest_menu": {
+          "node_id": "quest_menu",
+          "text": "村庄确实需要帮助。你看看这些任务，能帮上忙吗？",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "让我看看",
+              "next_node": "quest_list",
+              "action": "show_quest_list",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "quest_list": {
+          "node_id": "quest_list",
+          "text": "这是村庄目前的困难，选择一个你能帮忙的吧。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "好的，我知道了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "village_info": {
+          "node_id": "village_info",
+          "text": "我们村庄虽然不大，但村民们团结一心。主要靠农业和畜牧业为生。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢介绍",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？你要送我们礼物？太客气了。",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "太感谢了！村民们会记住你的善举的！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢你的心意。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "嗯...这个...谢谢你的好意。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "你是我们的好朋友！村庄永远欢迎你的到来。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "一路平安，朋友。愿丰收之神保佑你。",
+          "options": []
+        }
+      }
+    },
+    "villager_generic": {
+      "name": "村民",
+      "title": "村民",
+      "icon": "🧑‍🌾",
+      "description": "勤劳的村民，正在田间劳作",
+      "npc_type": "villager",
+      "personality": "friendly",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "你好啊！今天天气不错，适合干活。",
+          "options": [
+            {
+              "option_id": "opt_info",
+              "text": "村里最近怎么样？",
+              "next_node": "village_news",
+              "action": "show_info",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "village_news": {
+          "node_id": "village_news",
+          "text": "最近还不错，收成挺好。就是偶尔有劫匪出没，有点担心。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "我会注意的",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？送我的？太客气了！",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "哇！太棒了！谢谢你！你是我见过最好的人！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢你的礼物！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "嗯...这个...好吧，谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "我们是好朋友啦！有空常来玩！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "一定",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "再见啦！有空再来玩！",
+          "options": []
+        }
+      }
+    },
+    "horse_trader_village": {
+      "name": "巴图",
+      "title": "马商",
+      "icon": "🐴",
+      "description": "草原来的马商，带来优良的马匹",
+      "npc_type": "horse_trader",
+      "personality": "neutral",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "嘿！来看看我的马！最好的马都在这里。",
+          "options": [
+            {
+              "option_id": "opt_shop",
+              "text": "看看你的马",
+              "next_node": "shop_view",
+              "action": "open_shop",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "shop_view": {
+          "node_id": "shop_view",
+          "text": "这些都是好马！从草原来的，体格健壮，跑得快！",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "让我看看",
+              "next_node": "shop_open",
+              "action": "open_shop",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "shop_open": {
+          "node_id": "shop_open",
+          "text": "选好了吗？",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "再看看",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？你要送我什么？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了，没什么",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "好！下次买马我给你优惠！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "谢谢",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "嗯...不太需要这个。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "我们是朋友了！以后买马找我，给你最低价！",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "太好了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "再见！需要马的时候记得来找我！",
+          "options": []
+        }
+      }
+    },
+    "blacksmith_village": {
+      "name": "老铁匠",
+      "title": "铁匠",
+      "icon": "🔨",
+      "description": "村里唯一的铁匠，手艺还不错",
+      "npc_type": "blacksmith",
+      "personality": "grumpy",
+      "dialog": {
+        "greeting": {
+          "node_id": "greeting",
+          "text": "村里铁匠铺。修理装备找我。",
+          "options": [
+            {
+              "option_id": "opt_repair",
+              "text": "修理装备",
+              "next_node": "repair_view",
+              "action": "open_blacksmith",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_gift",
+              "text": "这是一点心意",
+              "next_node": "gift_prompt",
+              "action": "show_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_favor",
+              "text": "我们关系如何？",
+              "next_node": "favor_info",
+              "action": "show_favor_info",
+              "action_data": {},
+              "min_favor": 10
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "repair_view": {
+          "node_id": "repair_view",
+          "text": "拿来吧。",
+          "options": [
+            {
+              "option_id": "opt_back",
+              "text": "好的",
+              "next_node": "repair_open",
+              "action": "open_blacksmith",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "先不了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "repair_open": {
+          "node_id": "repair_open",
+          "text": "选装备。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "知道了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_prompt": {
+          "node_id": "gift_prompt",
+          "text": "哦？",
+          "options": [
+            {
+              "option_id": "opt_gift_select",
+              "text": "[打开礼物列表]",
+              "next_node": "gift_selection",
+              "action": "open_gift_selector",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_back_greet",
+              "text": "算了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_selection": {
+          "node_id": "gift_selection",
+          "text": "请选择要赠送的礼物...",
+          "options": [
+            {
+              "option_id": "opt_back_gift",
+              "text": "稍后再说",
+              "next_node": "gift_prompt",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_good": {
+          "node_id": "gift_received_good",
+          "text": "好！下次给你打折。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_normal": {
+          "node_id": "gift_received_normal",
+          "text": "谢谢。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "不客气",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "gift_received_bad": {
+          "node_id": "gift_received_bad",
+          "text": "哼...勉强收下。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "抱歉",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            },
+            {
+              "option_id": "opt_leave",
+              "text": "再见",
+              "next_node": "farewell",
+              "action": "close",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "favor_info": {
+          "node_id": "favor_info",
+          "text": "关系不错。你的装备我会用心修。",
+          "options": [
+            {
+              "option_id": "opt_back_greet",
+              "text": "拜托了",
+              "next_node": "greeting",
+              "action": "none",
+              "action_data": {},
+              "min_favor": 0
+            }
+          ]
+        },
+        "farewell": {
+          "node_id": "farewell",
+          "text": "武器保养好才能保命。再见。",
+          "options": []
+        }
+      }
+    }
+  }
+}
