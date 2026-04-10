@@ -1,13 +1,13 @@
 import { ElNotification } from 'element-plus';
-import { GameEvent, GameState } from '@/game/game-state';
+import { GameEvent, getGameState } from '@/game/game-state';
 
 // Notification service for game events
 export class GameNotificationService {
   private static instance: GameNotificationService;
-  private gameState: GameState;
+  private gameState: ReturnType<typeof getGameState>;
 
   private constructor() {
-    this.gameState = new GameState();
+    this.gameState = getGameState();
     this.initEventListeners();
   }
 

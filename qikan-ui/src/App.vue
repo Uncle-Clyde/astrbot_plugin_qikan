@@ -1,12 +1,14 @@
 <template>
   <div id="app" :class="themeClass" :style="customStyles" @click="handleGlobalClick">
     <router-view />
+    <MessagePanel />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch, onUnmounted } from 'vue'
 import { useGameStore } from './stores/game'
+import MessagePanel from './components/MessagePanel.vue'
 
 const gameStore = useGameStore()
 

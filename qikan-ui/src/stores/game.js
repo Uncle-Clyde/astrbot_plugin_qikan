@@ -2,6 +2,10 @@ import { defineStore } from 'pinia'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useLogStore } from './log'
+import { getGameState, GameEvent } from '@/game/game-state'
+import { v4 as uuidv4 } from 'uuid'
+import { GameNotificationService } from '@/services/game-notification-service'
+import { getGameState } from '@/game/game-state'
 
 let audioStore = null
 const getAudioStore = () => {
@@ -310,13 +314,49 @@ export const useGameStore = defineStore('game', {
         }
       }
 
-      switch (msg.type) {
-        case 'state_update':
+       switch (msg.type) {
+        case 'state_update': {
+          const oldTown = this.player?.currentLocation || null
           this.player = msg.data || msg
+          const newTown = this.player?.currentLocation || null
+          
+          // Handle town entry/exit notifications
+          if (newTown && newTown !== oldTown) {
+            getGameState().enterTown(newTown)
+            // Dispatch WebSocket event for town entry
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_ENTER,
+              payload: { townName: newTown }
+            })
+          } else if (!newTown && oldTown) {
+            getGameState().leaveTown()
+            // Dispatch WebSocket event for town exit
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_LEAVE,
+              payload: { townName: oldTown }
+            })
+          }
           break
-        case 'inventory':
+        }
+        case 'inventory': {
+          const oldItems = this.inventory
           this.inventory = msg.data?.items || msg.items || []
+          
+          // Find new items and trigger acquisition notifications
+          const newItems = this.inventory.filter(
+            item => !oldItems.some(oldItem => oldItem.id === item.id)
+          )
+          
+          newItems.forEach(item => {
+            getGameState().addItem(item)
+            // Dispatch WebSocket event for item acquisition
+            this.dispatchWebSocketEvent({
+              type: GameEvent.ITEM_ACQUIRE,
+              payload: { item }
+            })
+          })
           break
+        }
         case 'world_chat_msg':
           this.worldChat.push(msg.data || msg)
           if (this.worldChat.length > 100) this.worldChat.shift()
@@ -326,6 +366,243 @@ export const useGameStore = defineStore('game', {
           break
         case 'rankings_data':
           this.rankings = msg.data
+          break
+        case 'map_player':
+        case 'map_locations':
+          break
+        case 'town_menu':
+        case 'town_menu_action':
+        case 'location_update':
+          break
+        case 'action_result':
+          // Handle action results for town entry/exit
+          if (msg.data?.success) {
+            const action = msg.action
+            if (action === 'enter_location' && msg.data?.town_name) {
+              getGameState().enterTown(msg.data.town_name)
+              // Dispatch WebSocket event for town entry
+              this.dispatchWebSocketEvent({
+                type: GameEvent.TOWN_ENTER,
+                payload: { townName: msg.data.town_name }
+              })
+            } else if (action === 'leave_location') {
+              const oldTown = this.player?.currentLocation
+              getGameState().leaveTown()
+              // Dispatch WebSocket event for town exit
+              this.dispatchWebSocketEvent({
+                type: GameEvent.TOWN_LEAVE,
+                payload: { townName: oldTown }
+              })
+            }
+          }
+          break
+        case 'town_update':
+          // Handle explicit town updates from server
+          if (msg.data?.town_name) {
+            getGameState().enterTown(msg.data.town_name)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_ENTER,
+              payload: { townName: msg.data.town_name }
+            })
+          } else if (msg.data?.left_town) {
+            const oldTown = this.player?.currentLocation
+            getGameState().leaveTown()
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_LEAVE,
+              payload: { townName: oldTown }
+            })
+          }
+          break
+        case 'custom_notification':
+          // Handle custom notifications from server
+          if (msg.data?.type === 'town_enter' && msg.data?.town_name) {
+            getGameState().enterTown(msg.data.town_name)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_ENTER,
+              payload: { townName: msg.data.town_name }
+            })
+          } else if (msg.data?.type === 'town_leave') {
+            const oldTown = this.player?.currentLocation
+            getGameState().leaveTown()
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_LEAVE,
+              payload: { townName: oldTown }
+            })
+          } else if (msg.data?.type === 'item_acquire' && msg.data?.item) {
+            getGameState().addItem(msg.data.item)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.ITEM_ACQUIRE,
+              payload: { item: msg.data.item }
+            })
+          }
+          break
+        case 'server_notification':
+          // Handle server-side notifications
+          if (msg.data?.event_type && msg.data?.payload) {
+            const eventMap = {
+              [GameEvent.TOWN_ENTER]: () => {
+                getGameState().enterTown(msg.data.payload.townName)
+                this.dispatchWebSocketEvent({
+                  type: GameEvent.TOWN_ENTER,
+                  payload: { townName: msg.data.payload.townName }
+                })
+              },
+              [GameEvent.TOWN_LEAVE]: () => {
+                const oldTown = this.player?.currentLocation
+                getGameState().leaveTown()
+                this.dispatchWebSocketEvent({
+                  type: GameEvent.TOWN_LEAVE,
+                  payload: { townName: oldTown }
+                })
+              },
+              [GameEvent.ITEM_ACQUIRE]: () => {
+                getGameState().addItem(msg.data.payload.item)
+                this.dispatchWebSocketEvent({
+                  type: GameEvent.ITEM_ACQUIRE,
+                  payload: { item: msg.data.payload.item }
+                })
+              }
+            }
+            
+            const handler = eventMap[msg.data.event_type]
+            if (handler) {
+              handler()
+            }
+          }
+          break
+        case 'location_update':
+          // Handle explicit location updates from server
+          if (msg.data?.town_name) {
+            getGameState().enterTown(msg.data.town_name)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_ENTER,
+              payload: { townName: msg.data.town_name }
+            })
+          } else if (msg.data?.left_town) {
+            const oldTown = this.player?.currentLocation
+            getGameState().leaveTown()
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_LEAVE,
+              payload: { townName: oldTown }
+            })
+          }
+          break
+        case 'item_update':
+          // Handle explicit item updates from server
+          if (msg.data?.item) {
+            getGameState().addItem(msg.data.item)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.ITEM_ACQUIRE,
+              payload: { item: msg.data.item }
+            })
+          }
+          break
+        case 'town_event':
+          // Handle town-specific events from server
+          if (msg.data?.event_type && msg.data?.payload) {
+            const townEventMap = {
+              'town_enter': () => {
+                getGameState().enterTown(msg.data.payload.townName)
+                this.dispatchWebSocketEvent({
+                  type: GameEvent.TOWN_ENTER,
+                  payload: { townName: msg.data.payload.townName }
+                })
+              },
+              'town_leave': () => {
+                const oldTown = this.player?.currentLocation
+                getGameState().leaveTown()
+                this.dispatchWebSocketEvent({
+                  type: GameEvent.TOWN_LEAVE,
+                  payload: { townName: oldTown }
+                })
+              }
+            }
+            
+            const handler = townEventMap[msg.data.event_type]
+            if (handler) {
+              handler()
+            }
+          }
+          break
+        case 'item_event':
+          // Handle item-specific events from server
+          if (msg.data?.event_type && msg.data?.item) {
+            const itemEventMap = {
+              'item_acquire': () => {
+                getGameState().addItem(msg.data.item)
+                this.dispatchWebSocketEvent({
+                  type: GameEvent.ITEM_ACQUIRE,
+                  payload: { item: msg.data.item }
+                })
+              }
+            }
+            
+            const handler = itemEventMap[msg.data.event_type]
+            if (handler) {
+              handler()
+            }
+          }
+          break
+        case 'location_change':
+          // Handle location changes from server
+          if (msg.data?.new_location) {
+            getGameState().enterTown(msg.data.new_location)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_ENTER,
+              payload: { townName: msg.data.new_location }
+            })
+          } else if (msg.data?.left_location) {
+            const oldTown = this.player?.currentLocation
+            getGameState().leaveTown()
+            this.dispatchWebSocketEvent({
+              type: GameEvent.TOWN_LEAVE,
+              payload: { townName: oldTown }
+            })
+          }
+          break
+        case 'item_change':
+          // Handle item changes from server
+          if (msg.data?.item) {
+            getGameState().addItem(msg.data.item)
+            this.dispatchWebSocketEvent({
+              type: GameEvent.ITEM_ACQUIRE,
+              payload: { item: msg.data.item }
+            })
+          }
+          break
+        }
+        case 'inventory': {
+          const oldItems = this.inventory
+          this.inventory = msg.data?.items || msg.items || []
+          
+          // Find new items and trigger acquisition notifications
+          const newItems = this.inventory.filter(
+            item => !oldItems.some(oldItem => oldItem.id === item.id)
+          )
+          
+          newItems.forEach(item => {
+            getGameState().addItem(item)
+          })
+          break
+        }
+        case 'world_chat_msg':
+          this.worldChat.push(msg.data || msg)
+          if (this.worldChat.length > 100) this.worldChat.shift()
+          break
+        case 'world_chat_history':
+          this.worldChat = msg.data || []
+          break
+        case 'rankings_data':
+          this.rankings = msg.data
+          break
+        case 'map_player':
+        case 'map_locations':
+          break
+        case 'town_menu':
+          break
+        case 'town_menu_action':
+          break
+        case 'location_update':
           break
         case 'action_result':
           if (msg.data?.success) {

@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue';
-import { GameEvent, GameState } from '@/game/game-state';
+import { GameEvent, getGameState } from '@/game/game-state';
 
 const messages = ref<Array<{
   type: string;
@@ -32,7 +32,7 @@ const messages = ref<Array<{
   timestamp: string;
 }>>([]);
 
-const gameState = new GameState();
+const gameState = getGameState();
 
 const eventHandlers = {
   [GameEvent.TOWN_ENTER]: (payload: { townName: string }) => {
