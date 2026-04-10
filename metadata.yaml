@@ -1,6 +1,6 @@
 name: astrbot_plugin_qikan
 display_name: 骑砍英雄传
 desc: 骑砍风格文字RPG游戏插件，支持聊天指令和网页界面
-version: v0.1.3
+version: v0.1.21
 author: Uncle-Clyde
 repo: https://github.com/Uncle-Clyde/astrbot_plugin_qikan

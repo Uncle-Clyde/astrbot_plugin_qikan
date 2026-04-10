@@ -44,13 +44,13 @@ class CityQuest:
     description: str
     icon: str
     quest_type: int
+    target_type: str  # "bandit", "boss", "dungeon", "item", "trade", "pvp"
     
     # 任务要求
     min_level: int = 1
     required_faction: Optional[int] = None  # 需要的阵营声望
     
     # 任务目标
-    target_type: str  # "bandit", "boss", "dungeon", "item", "trade", "pvp"
     target_id: str = ""
     target_count: int = 1
     

@@ -141,6 +141,10 @@ class GameEngine:
         from .player_level import init_level_system
         from .admin_system import get_admin_manager
         from . import skills_simple
+        from . import city_quest_system
+        from . import legendary_system
+        from . import random_events
+        from ..web.teamspeak_middleware import TeamSpeakMiddleware
 
         realms = await self._data_manager.load_realms()
         set_realm_config(realms)
@@ -158,6 +162,20 @@ class GameEngine:
 
         # 初始化等级系统和称号系统
         init_level_system()
+        
+        # 初始化城市任务系统
+        # city_quest_system.init_city_quest_system()  # 移除不存在的函数调用
+        
+        # 初始化传奇BOSS系统
+        # legendary_system.init_legendary_system()  # 移除不存在的函数调用
+        
+        # 初始化随机事件系统
+        # random_events.init_random_events()  # 移除不存在的函数调用
+        
+        # 初始化 TeamSpeak 中间件
+        self.ts_middleware = TeamSpeakMiddleware()
+        if hasattr(self, '_config') and self._config:
+            await self.ts_middleware.initialize()
         
         # 初始化分级管理员系统
         self.admin_manager = get_admin_manager()
@@ -3870,23 +3888,27 @@ class GameEngine:
         if not player:
             return {"success": False, "message": "你还没有角色"}
         
-        # 随机选择一只野生动物
-        import random
-        wildlife_list = list(hunting.WILDLIFE.values())
-        wildlife = random.choice(wildlife_list)
+        HUNT_LINGQI_COST = 15
         
-        # 模拟战斗胜利
+        if player.lingqi < HUNT_LINGQI_COST:
+            return {"success": False, "message": f"体力不足，需要 {HUNT_LINGQI_COST} 点体力"}
+        
+        if wildlife_id and wildlife_id in hunting.WILDLIFE:
+            wildlife = hunting.WILDLIFE[wildlife_id]
+        else:
+            import random
+            wildlife_list = list(hunting.WILDLIFE.values())
+            wildlife = random.choice(wildlife_list)
+        
         exp_reward = wildlife.exp_reward
         gold_reward = wildlife.gold_reward
         
-        # 计算掉落
         drops = hunting.calculate_hunt_drops(wildlife)
         
-        # 添加经验和金币
         player.exp = getattr(player, 'exp', 0) + exp_reward
         player.spirit_stones = getattr(player, 'spirit_stones', 0) + gold_reward
+        player.lingqi -= HUNT_LINGQI_COST
         
-        # 添加掉落物品
         if not hasattr(player, 'hunting_materials'):
             player.hunting_materials = {}
         
@@ -3898,14 +3920,15 @@ class GameEngine:
         
         await self._save_player(player)
         
-        drops_str = "、" .join(drop_texts) if drop_texts else "无"
+        drops_str = "、".join(drop_texts) if drop_texts else "无"
         
         return {
             "success": True,
-            "message": f"你猎杀了{wildlife.name}！获得经验{exp_reward}，金币{gold_reward}，掉落: {drops_str}",
+            "message": f"消耗{HUNT_LINGQI_COST}点体力，猎杀了{wildlife.name}！获得经验{exp_reward}，金币{gold_reward}，掉落：{drops_str}",
             "exp": exp_reward,
             "gold": gold_reward,
             "drops": drops,
+            "lingqi_remaining": player.lingqi,
         }
 
     # ── 饰品制作系统 ──────────────────────────────────────────────

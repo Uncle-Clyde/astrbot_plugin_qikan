@@ -55,7 +55,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGameStore } from '../stores/game'
 import { useLogStore } from '../stores/log'
@@ -73,9 +73,26 @@ let cooldownTimer = null
 const player = computed(() => gameStore.player)
 const herbalismLevel = computed(() => player.value?.skills?.[31] ?? 0)
 const canGather = computed(() => {
-  if (!player.value) return false
-  return (player.value.lingqi ?? 0) >= 10 && cooldownRemaining.value <= 0
+  if (!player.value) {
+    console.log('[Gathering] canGather: no player')
+    return false
+  }
+  const hasEnoughLingqi = (player.value.lingqi ?? 0) >= 10
+  const cooldownOk = cooldownRemaining.value <= 0
+  console.log('[Gathering] canGather check:', {
+    lingqi: player.value.lingqi,
+    required: 10,
+    hasEnoughLingqi,
+    cooldownRemaining: cooldownRemaining.value,
+    cooldownOk,
+    canGather: hasEnoughLingqi && cooldownOk
+  })
+  return hasEnoughLingqi && cooldownOk
 })
+
+watch(player, (newPlayer) => {
+  console.log('[Gathering] player updated:', newPlayer ? { lingqi: newPlayer.lingqi, max_lingqi: newPlayer.max_lingqi } : null)
+}, { immediate: true })
 
 const herbList = [
   { id: 'herb_common', name: '普通草药', icon: '🌱', rarity: 0.6, rarityLabel: '常见', heal: 20, rate: 60, description: '野外常见的草药，可用于制作绷带' },
@@ -105,7 +122,8 @@ const handleWsMessage = (msg) => {
     if (msg.data?.success) {
       ElMessage.success(msg.data.message)
       gatherCount.value++
-      cooldownRemaining.value = 5
+      const cooldownFromServer = msg.data.cooldown_remaining ?? 5
+      cooldownRemaining.value = cooldownFromServer
       startCooldownTimer()
       logStore.addLog({ type: 'gather', icon: '🌿', title: '采集成功', content: msg.data.message })
       gameStore.getPanel()
@@ -130,8 +148,8 @@ onMounted(async () => {
   if (!gameStore.token) { router.push('/'); return }
   if (!gameStore.connected) await gameStore.connectWs()
   gameStore.wsMessageHandlers = gameStore.wsMessageHandlers || {}
-  gameStore.wsMessageHandlers['gathering'] = handleWsMessage
-  gameStore.getPanel()
+  gameStore.wsMessageHandlers['gather_herbs'] = handleWsMessage
+  await gameStore.getPanel()
   logStore.init()
 })
 

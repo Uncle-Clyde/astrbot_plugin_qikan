@@ -1287,6 +1287,7 @@ async def _handle_message(
         # 获取玩家名
         player = await engine.get_player(user_id)
         player_name = player.name if player else "未知"
+        from ..game.constants import get_realm_name
         player_realm = get_realm_name(player.realm, player.sub_realm) if player else ""
         # 获取家族名
         sect_name = ""

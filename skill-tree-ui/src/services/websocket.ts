@@ -6,6 +6,27 @@ export interface WebSocketMessage {
   [key: string]: unknown
 }
 
+export interface LocationEvent {
+  type: 'location'
+  payload: {
+    townName: string
+    timestamp: number
+  }
+}
+
+export interface ItemEvent {
+  type: 'item'
+  payload: {
+    itemName: string
+    itemId: string
+    timestamp: number
+  }
+}
+  type: string
+  data?: unknown
+  [key: string]: unknown
+}
+
 class WebSocketService {
   private ws: WebSocket | null = null
   private messageHandlers: Map<string, Set<(data: unknown) => void>> = new Map()
@@ -66,6 +87,12 @@ class WebSocketService {
   }
 
   private handleMessage(message: WebSocketMessage) {
+  if (message.type === 'location') {
+    this.handleLocationEvent(message as LocationEvent)
+  } else if (message.type === 'item') {
+    this.handleItemEvent(message as ItemEvent)
+  }
+}
     const handlers = this.messageHandlers.get(message.type)
     if (handlers) {
       handlers.forEach(handler => handler(message.data))

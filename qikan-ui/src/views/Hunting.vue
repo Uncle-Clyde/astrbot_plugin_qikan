@@ -103,6 +103,15 @@ const formatCooldown = (s) => {
 
 const hunt = async (wildlifeId) => {
   if (!canHunt.value || isHunting.value) return
+  
+  const requiredLingqi = 15
+  const currentLingqi = player.value?.lingqi ?? 0
+  
+  if (currentLingqi < requiredLingqi) {
+    ElMessage.error(`体力不足，需要 ${requiredLingqi} 点体力`)
+    return
+  }
+  
   isHunting.value = true
   gameStore.send({ type: 'hunt_wildlife', data: { wildlife_id: wildlifeId } })
 }

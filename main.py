@@ -2,7 +2,37 @@
 
 from __future__ import annotations
 
+import sys
 import os
+import zipfile
+from pathlib import Path
+
+_py_version = f"cp{sys.version_info.major}{sys.version_info.minor}"
+
+_libs_dir = Path(__file__).parent / "libs"
+if _libs_dir.exists():
+    _libs_str = str(_libs_dir)
+    if _libs_str not in sys.path:
+        sys.path.insert(0, _libs_str)
+    
+    _extracted_dir = _libs_dir / "extracted" / _py_version
+    if not _extracted_dir.exists():
+        _extracted_dir.mkdir(parents=True, exist_ok=True)
+        for _wheel_file in _libs_dir.glob("*.whl"):
+            if _wheel_file.suffix == ".whl":
+                _wheel_name = _wheel_file.stem
+                if _py_version in _wheel_name or "py3-none-any" in _wheel_name or "py2.py3" in _wheel_name:
+                    try:
+                        with zipfile.ZipFile(_wheel_file, 'r') as _zf:
+                            _zf.extractall(_extracted_dir)
+                    except Exception:
+                        pass
+    
+    if _extracted_dir.exists():
+        _extracted_str = str(_extracted_dir)
+        if _extracted_str not in sys.path:
+            sys.path.insert(0, _extracted_str)
+
 import json
 import re
 import time
@@ -21,7 +51,7 @@ _MISSING = object()
 CMD_PREFIX = "骑砍"
 
 
-@register("astrbot_plugin_qikan", "qikan", "骑砍文字RPG游戏，支持聊天指令和网页界面", "0.5.2")
+@register("astrbot_plugin_qikan", "qikan", "骑砍文字RPG游戏，支持聊天指令和网页界面", "0.1.21")
 class XiuxianPlugin(Star):
     def __init__(self, context: Context, config=None):
         super().__init__(context)
@@ -390,35 +420,6 @@ class XiuxianPlugin(Star):
             llm_response = await provider.text_chat(prompt=prompt, contexts=[])
         except Exception:
             logger.exception("骑砍英雄传：聊天AI审核调用失败")
-            return {"allow": True, "reason": ""}
-
-        try:
-            provider = get_provider()
-        except Exception:
-            return {"allow": True, "reason": ""}
-        if hasattr(provider, "__await__"):
-            try:
-                provider = await provider
-            except Exception:
-                return {"allow": True, "reason": ""}
-
-        if not provider or not hasattr(provider, "text_chat"):
-            return {"allow": True, "reason": ""}
-
-        prompt = (
-            "你是骑砍游戏世界频道聊天内容审核器。\n"
-            "请判断以下聊天内容是否包含："
-            "脏话、骂人、色情、低俗挑逗、人身攻击。\n"
-            "只有在\u201c高度确定违规\u201d时才拒绝；普通聊天和游戏讨论必须放行。\n"
-            "只输出JSON，不要任何额外文本，格式："
-            '{"allow": true/false, "reason": "一句话原因"}。\n'
-            f"待审核内容：{content}"
-        )
-
-        try:
-            llm_response = await provider.text_chat(prompt=prompt, contexts=[])
-        except Exception:
-            logger.exception("骑砍世界：聊天AI审核调用失败")
             return {"allow": True, "reason": ""}
 
         raw = str(
@@ -1040,7 +1041,7 @@ class XiuxianPlugin(Star):
         from .game.bandit_combat import engage_bandit
         from .game.heal_skills import can_fight, check_injury_expired
         
-        player = self.engine.get_player(player_id)
+        player = self._engine.get_player(player_id)
         if not player:
             yield event.plain_result("玩家数据异常")
             return
