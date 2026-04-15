@@ -52,6 +52,8 @@ const filters = [
   { key: 'combat', icon: '⚔️', label: '战斗' },
   { key: 'trade', icon: '💰', label: '交易' },
   { key: 'gather', icon: '🌿', label: '采集' },
+  { key: 'equip', icon: '🛡️', label: '装备' },
+  { key: 'cultivate', icon: '🧘', label: '修炼' },
   { key: 'system', icon: '🔧', label: '系统' },
   { key: 'social', icon: '💬', label: '社交' },
   { key: 'travel', icon: '🗺️', label: '移动' },

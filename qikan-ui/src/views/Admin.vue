@@ -173,6 +173,9 @@
           <el-form-item label="密码">
             <el-input v-model="loginForm.password" type="password" placeholder="管理员密码" show-password />
           </el-form-item>
+          <el-form-item label="访问密码" v-if="requireAccessPassword">
+            <el-input v-model="loginForm.accessPassword" type="password" placeholder="访问密码(如有)" show-password />
+          </el-form-item>
           <el-form-item>
             <el-button type="primary" @click="handleLogin" :loading="loginLoading">登录</el-button>
           </el-form-item>
@@ -368,7 +371,8 @@ const canManageAdmins = ref(false)
 const canUploadIcons = ref(false)
 const activeTab = ref('ui')
 const loginLoading = ref(false)
-const loginForm = ref({ username: '', password: '' })
+const loginForm = ref({ username: '', password: '', accessPassword: '' })
+const requireAccessPassword = ref(false)
 
 const uiConfig = ref({
   enabled: false,
@@ -438,7 +442,8 @@ async function handleLogin() {
   try {
     const res = await api.post('/api/admin/login', {
       account: loginForm.value.username,
-      password: loginForm.value.password
+      password: loginForm.value.password,
+      access_password: loginForm.value.accessPassword
     })
     if (res.success) {
       adminToken.value = res.admin_token || res.token
@@ -704,9 +709,18 @@ function saveNpcDialog() {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
   checkAdminStatus()
   loadDialogNpcList()
+  try {
+    const resp = await fetch('/api/config')
+    const data = await resp.json()
+    if (data.success && data.config) {
+      requireAccessPassword.value = data.config.require_access_password || false
+    }
+  } catch (e) {
+    console.error('加载配置失败', e)
+  }
 })
 </script>
 

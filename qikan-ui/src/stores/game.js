@@ -3,9 +3,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useLogStore } from './log'
 import { getGameState, GameEvent } from '@/game/game-state'
-import { v4 as uuidv4 } from 'uuid'
 import { GameNotificationService } from '@/services/game-notification-service'
-import { getGameState } from '@/game/game-state'
 
 let audioStore = null
 const getAudioStore = () => {
@@ -340,22 +338,32 @@ export const useGameStore = defineStore('game', {
         }
         case 'inventory': {
           const oldItems = this.inventory
-          this.inventory = msg.data?.items || msg.items || []
-          
+          // 兼容两种格式：data 是数组 或 data 是对象 {items: [...]}
+          let invData = msg.data
+          if (Array.isArray(invData)) {
+            this.inventory = invData
+          } else if (invData?.items) {
+            this.inventory = invData.items
+          } else if (msg.items) {
+            this.inventory = msg.items
+          } else {
+            this.inventory = []
+          }
+
           // Find new items and trigger acquisition notifications
           const newItems = this.inventory.filter(
             item => !oldItems.some(oldItem => oldItem.id === item.id)
           )
-          
-          newItems.forEach(item => {
-            getGameState().addItem(item)
-            // Dispatch WebSocket event for item acquisition
-            this.dispatchWebSocketEvent({
-              type: GameEvent.ITEM_ACQUIRE,
-              payload: { item }
+
+newItems.forEach(item => {
+              getGameState().addItem(item)
+              // Dispatch WebSocket event for item acquisition
+              this.dispatchWebSocketEvent({
+                type: GameEvent.ITEM_ACQUIRE,
+                payload: { item }
+              })
             })
-          })
-          break
+            break
         }
         case 'world_chat_msg':
           this.worldChat.push(msg.data || msg)
@@ -568,23 +576,8 @@ export const useGameStore = defineStore('game', {
               type: GameEvent.ITEM_ACQUIRE,
               payload: { item: msg.data.item }
             })
-          }
+}
           break
-        }
-        case 'inventory': {
-          const oldItems = this.inventory
-          this.inventory = msg.data?.items || msg.items || []
-          
-          // Find new items and trigger acquisition notifications
-          const newItems = this.inventory.filter(
-            item => !oldItems.some(oldItem => oldItem.id === item.id)
-          )
-          
-          newItems.forEach(item => {
-            getGameState().addItem(item)
-          })
-          break
-        }
         case 'world_chat_msg':
           this.worldChat.push(msg.data || msg)
           if (this.worldChat.length > 100) this.worldChat.shift()
@@ -628,12 +621,21 @@ export const useGameStore = defineStore('game', {
               icon: logStore.getActionLogIcon(action),
               title: action || '操作',
               content: msg.data.message || '操作成功',
-            })
+              action: action,
+            }, msg.data)
             if (action === 'start_afk' || action === 'cancel_afk' || action === 'collect_afk') {
               setTimeout(() => this.getPanel(), 100)
             }
           } else if (msg.data?.success === false) {
             ElMessage.error(msg.data?.message || '操作失败')
+            const logStore = useLogStore()
+            logStore.addLog({
+              type: 'system',
+              icon: '❌',
+              title: logStore.getActionLogTitle(action) || action || '操作',
+              content: msg.data?.message || '操作失败',
+              action: action,
+            }, msg.data)
           }
           break
         case 'error':
@@ -667,6 +669,48 @@ export const useGameStore = defineStore('game', {
           break
         default:
           console.log('未处理的WebSocket消息类型:', msg.type, msg)
+      }
+    },
+
+    dispatchWebSocketEvent(event) {
+      const logStore = useLogStore()
+      
+      switch (event.type) {
+        case GameEvent.TOWN_ENTER:
+          getGameState().enterTown(event.payload.townName)
+          logStore.addLog({
+            type: 'travel',
+            icon: '🏰',
+            title: '进入城镇',
+            content: `进入了 ${event.payload.townName}`,
+            action: 'enter_location',
+          })
+          break
+        case GameEvent.TOWN_LEAVE:
+          getGameState().leaveTown()
+          logStore.addLog({
+            type: 'travel',
+            icon: '🚶',
+            title: '离开城镇',
+            content: `离开了 ${event.payload.townName}`,
+            action: 'leave_location',
+          })
+          break
+        case GameEvent.ITEM_ACQUIRE:
+          getGameState().addItem(event.payload.item)
+          const item = event.payload.item
+          const itemName = item?.name || '未知物品'
+          const quantity = item?.quantity || 1
+          logStore.addLog({
+            type: 'reward',
+            icon: '🎁',
+            title: '获得物品',
+            content: `获得了 ${quantity > 1 ? `${quantity}x ` : ''}${itemName}`,
+            action: 'item_acquire',
+          })
+          break
+        default:
+          console.log('未知的WebSocket事件类型:', event.type)
       }
     },
 

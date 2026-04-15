@@ -1198,65 +1198,6 @@ onUnmounted(() => {
     delete gameStore.wsMessageHandlers['spawn_select']
   }
 })
-    
-    // 等待一下让连接稳定
-    await new Promise(resolve => setTimeout(resolve, 300))
-    
-    // 发送请求
-    console.log('[Spawn] Sending requests...')
-    gameStore.send({ type: 'get_spawn_origins' })
-    gameStore.send({ type: 'get_spawn_locations' })
-  }
-}
-
-const handleSpawnWsMessage = (msg) => {
-  console.log('[Spawn] Received message:', msg.type)
-  if (msg.type === 'spawn_origins') {
-    spawnOrigins.value = msg.data || []
-    console.log('[Spawn] Loaded origins:', spawnOrigins.value.length)
-    spawnLoading.value = false
-  } else if (msg.type === 'spawn_locations') {
-    spawnLocations.value = msg.data || []
-    console.log('[Spawn] Loaded locations:', spawnLocations.value.length)
-    spawnLocationsLoading.value = false
-  } else if (msg.type === 'action_result' && msg.action === 'set_spawn_origin') {
-    confirmLoading.value = false
-    if (msg.data?.success) {
-      ElMessage.success('选择成功！欢迎来到卡拉迪亚大陆！')
-      showSpawnModal.value = false
-      sessionStorage.removeItem('needsSpawn')
-      sessionStorage.setItem('spawn_completed', '1')
-      gameStore.getPanel()
-      gameStore.getInventory()
-    } else {
-      ElMessage.error(msg.data?.message || '选择失败')
-    }
-  }
-}
-
-const selectOrigin = (originId) => {
-  selectedOrigin.value = originId
-  selectedLocation.value = ''
-}
-
-const selectLocation = (locationId) => {
-  selectedLocation.value = locationId
-}
-
-const confirmSpawnSelection = async () => {
-  if (!selectedOrigin.value) {
-    ElMessage.warning('请选择出身背景')
-    return
-  }
-  confirmLoading.value = true
-  gameStore.send({ 
-    type: 'set_spawn_origin',
-    data: {
-      origin: selectedOrigin.value,
-      location: selectedLocation.value
-    }
-  })
-}
 
 const canCollectAfk = computed(() => {
   if (!player.value?.afk_cultivate_end) return false
