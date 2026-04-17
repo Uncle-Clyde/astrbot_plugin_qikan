@@ -432,6 +432,26 @@
                     </div>
                   </div>
                 </div>
+
+                <el-divider />
+
+                <div class="personal-log-section">
+                  <div class="log-header">
+                    <span>📜 个人日志</span>
+                    <div class="log-header-controls">
+                      <el-button size="small" text @click="toggleLogMinimize">{{ logMinimized ? '⬆️' : '⬇️' }}</el-button>
+                      <el-button size="small" text @click="clearPersonalLog" v-if="personalLog.length > 0 && !logMinimized">清空</el-button>
+                    </div>
+                  </div>
+                  <div class="log-messages" ref="logRef" v-show="!logMinimized" :style="{ height: logHeight + 'px' }">
+                    <div v-for="(log, i) in personalLog" :key="i" class="log-message" :class="log.type">
+                      <span class="log-time">{{ log.time }}</span>
+                      <span class="log-content">{{ log.content }}</span>
+                    </div>
+                    <div v-if="personalLog.length === 0" class="log-empty">暂无记录</div>
+                  </div>
+                  <div class="log-resize-handle" @mousedown="startResize" v-show="!logMinimized"></div>
+                </div>
               </el-card>
             </el-col>
             
@@ -726,24 +746,6 @@
         />
         <el-button size="small" type="primary" @click="sendChatMessage">发送</el-button>
       </div>
-    </div>
-
-    <div class="personal-log-panel" :style="{ height: logMinimized ? '40px' : (logHeight + 40) + 'px' }">
-      <div class="log-header">
-        <span>📜 个人日志</span>
-        <div class="log-header-controls">
-          <el-button size="small" text @click="toggleLogMinimize">{{ logMinimized ? '⬆️' : '⬇️' }}</el-button>
-          <el-button size="small" text @click="clearPersonalLog" v-if="personalLog.length > 0 && !logMinimized">清空</el-button>
-        </div>
-      </div>
-      <div class="log-messages" ref="logRef" v-show="!logMinimized" :style="{ height: logHeight + 'px' }">
-        <div v-for="(log, i) in personalLog" :key="i" class="log-message" :class="log.type">
-          <span class="log-time">{{ log.time }}</span>
-          <span class="log-content">{{ log.content }}</span>
-        </div>
-        <div v-if="personalLog.length === 0" class="log-empty">暂无记录</div>
-      </div>
-      <div class="log-resize-handle" @mousedown="startResize" v-show="!logMinimized"></div>
     </div>
 
     <el-dialog v-model="equipDialogVisible" title="装备详情" width="450px">
@@ -2741,6 +2743,32 @@ const forceShowSpawnModal = async () => {
   color: #666;
   padding: 40px 0;
   font-size: 13px;
+}
+
+.personal-log-section {
+  border-top: 1px solid var(--el-border-color-lighter, #3D3D3D);
+  padding-top: 12px;
+  margin-top: 8px;
+}
+
+.personal-log-section .log-header {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: linear-gradient(90deg, rgba(74, 74, 138, 0.3) 0%, rgba(74, 74, 138, 0.2) 100%);
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-lighter, #3D3D3D);
+}
+
+.personal-log-section .log-messages {
+  height: 200px;
+  max-height: 300px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 8px;
+}
+
+.personal-log-section .log-resize-handle {
+  margin-top: 4px;
 }
 
 .chat-input .el-input {

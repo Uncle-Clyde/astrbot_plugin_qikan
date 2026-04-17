@@ -334,6 +334,13 @@ export const useGameStore = defineStore('game', {
               payload: { townName: oldTown }
             })
           }
+
+          // 自动获取背包数据
+          if (this.inventory.length === 0) {
+            setTimeout(() => {
+              this.getInventory()
+            }, 500)
+          }
           break
         }
         case 'inventory': {
@@ -355,15 +362,24 @@ export const useGameStore = defineStore('game', {
             item => !oldItems.some(oldItem => oldItem.id === item.id)
           )
 
-newItems.forEach(item => {
-              getGameState().addItem(item)
-              // Dispatch WebSocket event for item acquisition
-              this.dispatchWebSocketEvent({
-                type: GameEvent.ITEM_ACQUIRE,
-                payload: { item }
-              })
+          newItems.forEach(item => {
+            getGameState().addItem(item)
+            // Dispatch WebSocket event for item acquisition
+            this.dispatchWebSocketEvent({
+              type: GameEvent.ITEM_ACQUIRE,
+              payload: { item }
             })
-            break
+            // 添加：记录到个人日志
+            const logStore = useLogStore()
+            const quantity = item.count > 1 ? ` x${item.count}` : ''
+            logStore.addLog({
+              type: 'item',
+              icon: '💎',
+              title: '获得物品',
+              content: `${item.name}${quantity}`
+            })
+          })
+          break
         }
         case 'world_chat_msg':
           this.worldChat.push(msg.data || msg)
@@ -503,6 +519,15 @@ newItems.forEach(item => {
               type: GameEvent.ITEM_ACQUIRE,
               payload: { item: msg.data.item }
             })
+            const logStore = useLogStore()
+            const item = msg.data.item
+            const quantity = item.count > 1 ? ` x${item.count}` : ''
+            logStore.addLog({
+              type: 'item',
+              icon: '💎',
+              title: '获得物品',
+              content: `${item.name}${quantity}`
+            })
           }
           break
         case 'town_event':
@@ -535,12 +560,21 @@ newItems.forEach(item => {
         case 'item_event':
           // Handle item-specific events from server
           if (msg.data?.event_type && msg.data?.item) {
+            const item = msg.data.item
             const itemEventMap = {
               'item_acquire': () => {
-                getGameState().addItem(msg.data.item)
+                getGameState().addItem(item)
                 this.dispatchWebSocketEvent({
                   type: GameEvent.ITEM_ACQUIRE,
-                  payload: { item: msg.data.item }
+                  payload: { item }
+                })
+                const logStore = useLogStore()
+                const quantity = item.count > 1 ? ` x${item.count}` : ''
+                logStore.addLog({
+                  type: 'item',
+                  icon: '💎',
+                  title: '获得物品',
+                  content: `${item.name}${quantity}`
                 })
               }
             }
@@ -576,7 +610,16 @@ newItems.forEach(item => {
               type: GameEvent.ITEM_ACQUIRE,
               payload: { item: msg.data.item }
             })
-}
+            const logStore = useLogStore()
+            const item = msg.data.item
+            const quantity = item.count > 1 ? ` x${item.count}` : ''
+            logStore.addLog({
+              type: 'item',
+              icon: '💎',
+              title: '获得物品',
+              content: `${item.name}${quantity}`
+            })
+          }
           break
         case 'world_chat_msg':
           this.worldChat.push(msg.data || msg)
