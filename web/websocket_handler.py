@@ -846,7 +846,6 @@ async def _handle_message(
 
     elif msg_type == "update_map_position":
         # 更新玩家位置 (节流处理)
-        import time
         current_time = time.time()
         
         if not ws_manager:
@@ -2069,6 +2068,11 @@ async def _handle_message(
         """获取狩猎信息"""
         result = engine.get_hunting_info(user_id)
         return {"type": "hunting_info", "data": result}
+
+    elif msg_type == "get_gather_info":
+        """获取采集信息"""
+        result = engine.get_gather_info(user_id)
+        return {"type": "gathering_info", "data": result}
 
     elif msg_type == "craft_accessory":
         """制作饰品"""

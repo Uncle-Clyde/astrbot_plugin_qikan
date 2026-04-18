@@ -208,6 +208,7 @@ class DataManager:
                 slot             TEXT NOT NULL,
                 attack           INTEGER NOT NULL DEFAULT 0,
                 defense          INTEGER NOT NULL DEFAULT 0,
+                hp               INTEGER NOT NULL DEFAULT 0,
                 element          TEXT DEFAULT '无',
                 element_damage   INTEGER NOT NULL DEFAULT 0,
                 description      TEXT DEFAULT '',
@@ -690,6 +691,8 @@ class DataManager:
         await self._seed_adventure_scenes()
         # 填充被动技能定义（仅补齐缺失，不覆盖已有配置）
         await self._seed_heart_methods()
+        # 迁移旧版 weapons 表（添加 hp 列）
+        await self._alter_add_column("weapons", "hp", "INTEGER NOT NULL DEFAULT 0")
         # 填充装备定义（仅补齐缺失，不覆盖已有配置）
         await self._seed_weapons()
         # 填充战技定义（仅补齐缺失，不覆盖已有配置）
@@ -777,7 +780,7 @@ class DataManager:
         try:
             async with self.db.execute(
                 """
-                SELECT equip_id, name, tier, slot, attack, defense,
+                SELECT equip_id, name, tier, slot, attack, defense, hp,
                        element, element_damage, description
                 FROM weapons
                 WHERE enabled = 1
@@ -793,6 +796,7 @@ class DataManager:
                         slot=row["slot"],
                         attack=int(row["attack"] or 0),
                         defense=int(row["defense"] or 0),
+                        hp=int(row["hp"] or 0),
                         element=row["element"] or "无",
                         element_damage=int(row["element_damage"] or 0),
                         description=row["description"] or "",
@@ -1403,9 +1407,9 @@ class DataManager:
             INSERT OR IGNORE INTO heart_methods (
                 method_id, name, realm, quality, exp_multiplier,
                 attack_bonus, defense_bonus, dao_yun_rate, description, mastery_exp, enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            rows,
+rows,
         )
         await self.db.commit()
 
@@ -1430,6 +1434,7 @@ class DataManager:
                     eq.slot,
                     int(eq.attack),
                     int(eq.defense),
+                    int(eq.hp),
                     eq.element,
                     int(eq.element_damage),
                     eq.description,
@@ -1443,9 +1448,9 @@ class DataManager:
         await self.db.executemany(
             """
             INSERT OR IGNORE INTO weapons (
-                equip_id, name, tier, slot, attack, defense,
+                equip_id, name, tier, slot, attack, defense, hp,
                 element, element_damage, description, enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
@@ -1887,9 +1892,9 @@ class DataManager:
         cur = await self.db.execute(
             """
             INSERT OR IGNORE INTO weapons (
-                equip_id, name, tier, slot, attack, defense,
+                equip_id, name, tier, slot, attack, defense, hp,
                 element, element_damage, description, enabled
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 data["equip_id"],
@@ -1898,6 +1903,7 @@ class DataManager:
                 data["slot"],
                 int(data.get("attack", 0)),
                 int(data.get("defense", 0)),
+                int(data.get("hp", 0)),
                 str(data.get("element", "无") or "无"),
                 int(data.get("element_damage", 0)),
                 str(data.get("description", "")),
@@ -1911,7 +1917,7 @@ class DataManager:
         cur = await self.db.execute(
             """
             UPDATE weapons
-            SET name = ?, tier = ?, slot = ?, attack = ?, defense = ?,
+            SET name = ?, tier = ?, slot = ?, attack = ?, defense = ?, hp = ?,
                 element = ?, element_damage = ?, description = ?, enabled = ?
             WHERE equip_id = ?
             """,
@@ -1921,6 +1927,7 @@ class DataManager:
                 data["slot"],
                 int(data.get("attack", 0)),
                 int(data.get("defense", 0)),
+                int(data.get("hp", 0)),
                 str(data.get("element", "无") or "无"),
                 int(data.get("element_damage", 0)),
                 str(data.get("description", "")),
@@ -2618,8 +2625,9 @@ class DataManager:
         await self.db.execute(
             """INSERT INTO sects
                (sect_id, name, leader_id, description, level, spirit_stones,
-                max_members, join_policy, min_realm, created_at, announcement)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                max_members, join_policy, min_realm, created_at, announcement,
+                warehouse_capacity)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 sect["sect_id"],
                 sect["name"],
@@ -2632,6 +2640,7 @@ class DataManager:
                 sect.get("min_realm", 0),
                 sect["created_at"],
                 sect.get("announcement", ""),
+sect.get("warehouse_capacity", 200),
             ),
         )
         await self.db.commit()
@@ -2643,7 +2652,8 @@ class DataManager:
             await self.db.execute(
                 """INSERT INTO sects
                    (sect_id, name, leader_id, description, level, spirit_stones,
-                    max_members, join_policy, min_realm, created_at, announcement)
+                    max_members, join_policy, min_realm, created_at,
+                    announcement, warehouse_capacity)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     sect["sect_id"],
@@ -2657,6 +2667,7 @@ class DataManager:
                     sect.get("min_realm", 0),
                     sect["created_at"],
                     sect.get("announcement", ""),
+                    sect.get("warehouse_capacity", 200),
                 ),
             )
             await self.db.execute(

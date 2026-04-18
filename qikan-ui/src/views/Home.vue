@@ -141,7 +141,8 @@
       <el-main class="main-content">
         <div v-if="currentView === 'panel'" class="panel-view">
           <el-row :gutter="16">
-            <el-col :span="17">
+            <!-- 左侧: 玩家信息和装备栏 -->
+            <el-col :span="8">
               <el-card class="player-card">
                 <div class="player-header">
                     <div class="player-info">
@@ -195,47 +196,12 @@
                   </div>
                 </div>
 
-                <!-- 药水BUFF显示区 -->
-                <div v-if="player?.active_buffs && player.active_buffs.length > 0" class="pills-buff-section">
-                  <div class="buff-header">
-                    <span class="buff-title">🧪 药水BUFF</span>
-                    <span class="buff-count">{{ player.active_buffs.length }} 个效果</span>
-                  </div>
-                  <div class="buff-grid">
-                    <div
-                      v-for="(buff, idx) in player.active_buffs"
-                      :key="idx"
-                      class="buff-card"
-                      :class="buff.is_side_effect ? 'buff-debuff' : 'buff-positive'"
-                    >
-                      <div class="buff-name">{{ buff.name }}</div>
-                      <div class="buff-effects">
-                        <span v-if="buff.attack_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">
-                          {{ buff.is_side_effect ? '⚔️' : '⚔️+' }}{{ Math.abs(buff.attack_boost) }}
-                        </span>
-                        <span v-if="buff.defense_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">
-                          {{ buff.is_side_effect ? '🛡️' : '🛡️+' }}{{ Math.abs(buff.defense_boost) }}
-                        </span>
-                        <span v-if="buff.hp_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">
-                          {{ buff.is_side_effect ? '❤️' : '❤️+' }}{{ Math.abs(buff.hp_boost) }}
-                        </span>
-                        <span v-if="buff.lingqi_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">
-                          {{ buff.is_side_effect ? '⚡' : '⚡+' }}{{ Math.abs(buff.lingqi_boost) }}
-                        </span>
-                      </div>
-                      <div class="buff-timer">
-                        <span class="time-remaining">{{ formatBuffTime(buff.remaining_seconds) }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 <div class="action-buttons">
                   <el-button type="success" @click="handleCheckin" :loading="gameStore.isButtonLoading('checkin')">📅 签到</el-button>
                   <el-button type="info" @click="handleHeal" :loading="gameStore.isButtonLoading('heal')">💊 治疗</el-button>
                   <el-button v-if="player?.afk" type="danger" @click="handleCancelAfk" :loading="gameStore.isButtonLoading('cancel_afk')">⏹️ 取消挂机</el-button>
                   <el-button v-else type="primary" @click="handleStartAfk" :loading="gameStore.isButtonLoading('afk')">💤 挂机</el-button>
-                  <el-button v-if="canCollectAfk" type="warning" @click="handleCollectAfk" :loading="gameStore.isButtonLoading('collect_afk')">🎁 领取奖励</el-button>
+                  <el-button v-if="canCollectAfk" type="warning" @click="handleCollectAfk" :loading="gameStore.isButtonLoading('collect_afk')">🎁 领取</el-button>
                   <el-button type="warning" @click="$router.push('/dungeon')">⚔️ 地牢</el-button>
                   <el-button type="danger" @click="$router.push('/bandits')">👹 山贼</el-button>
                 </div>
@@ -249,102 +215,52 @@
                   </div>
                 </template>
                 
-                <!-- 可视化装备展示 - 人形模型 -->
                 <div v-if="showVisualEquipment" class="visual-equipment">
                   <div class="humanoid-figure">
-                    <!-- 头部 -->
-                    <div 
-                      class="equip-slot-visual head" 
-                      :class="{ equipped: player?.equipment?.helmet }"
-                      @click="handleEquipClick('helmet')"
-                    >
+                    <div class="equip-slot-visual head" :class="{ equipped: player?.equipment?.helmet }" @click="handleEquipClick('helmet')">
                       <span class="slot-emoji">{{ getSlotIcon('helmet') }}</span>
                       <span class="slot-label">头盔</span>
                       <span class="item-name" v-if="player?.equipment?.helmet">{{ player.equipment.helmet.name }}</span>
                       <span class="empty-tip" v-else>点击装备</span>
                     </div>
-                    
-                    <!-- 肩膀 - 左侧 -->
-                    <div 
-                      class="equip-slot-visual shoulder-l" 
-                      :class="{ equipped: player?.equipment?.shoulder }"
-                      @click="handleEquipClick('shoulder')"
-                    >
+                    <div class="equip-slot-visual shoulder-l" :class="{ equipped: player?.equipment?.shoulder }" @click="handleEquipClick('shoulder')">
                       <span class="slot-emoji">{{ getSlotIcon('shoulder') }}</span>
                       <span class="slot-label">肩</span>
                       <span class="item-name" v-if="player?.equipment?.shoulder">{{ player.equipment.shoulder.name }}</span>
                     </div>
-                    
-                    <!-- 武器 - 右手 -->
-                    <div 
-                      class="equip-slot-visual weapon-hand" 
-                      :class="{ equipped: player?.equipment?.weapon }"
-                      @click="handleEquipClick('weapon')"
-                    >
+                    <div class="equip-slot-visual weapon-hand" :class="{ equipped: player?.equipment?.weapon }" @click="handleEquipClick('weapon')">
                       <span class="slot-emoji">{{ getSlotIcon('weapon') }}</span>
                       <span class="slot-label">武器</span>
                       <span class="item-name" v-if="player?.equipment?.weapon">{{ player.equipment.weapon.name }}</span>
                     </div>
-                    
-                    <!-- 护甲 - 身体 -->
-                    <div 
-                      class="equip-slot-visual body" 
-                      :class="{ equipped: player?.equipment?.armor }"
-                      @click="handleEquipClick('armor')"
-                    >
+                    <div class="equip-slot-visual body" :class="{ equipped: player?.equipment?.armor }" @click="handleEquipClick('armor')">
                       <span class="slot-emoji">{{ getSlotIcon('armor') }}</span>
                       <span class="slot-label">护甲</span>
                       <span class="item-name" v-if="player?.equipment?.armor">{{ player.equipment.armor.name }}</span>
                       <span class="empty-tip" v-else>点击装备</span>
                     </div>
-                    
-                    <!-- 饰品1 - 左侧 -->
-                    <div 
-                      class="equip-slot-visual accessory-l" 
-                      :class="{ equipped: player?.equipment?.accessory1 }"
-                      @click="handleEquipClick('accessory1')"
-                    >
+                    <div class="equip-slot-visual accessory-l" :class="{ equipped: player?.equipment?.accessory1 }" @click="handleEquipClick('accessory1')">
                       <span class="slot-emoji">{{ getSlotIcon('accessory1') }}</span>
                       <span class="slot-label">饰品</span>
                       <span class="item-name" v-if="player?.equipment?.accessory1">{{ player.equipment.accessory1.name }}</span>
                     </div>
-                    
-                    <!-- 饰品2 - 右侧 -->
-                    <div 
-                      class="equip-slot-visual accessory-r" 
-                      :class="{ equipped: player?.equipment?.accessory2 }"
-                      @click="handleEquipClick('accessory2')"
-                    >
+                    <div class="equip-slot-visual accessory-r" :class="{ equipped: player?.equipment?.accessory2 }" @click="handleEquipClick('accessory2')">
                       <span class="slot-emoji">{{ getSlotIcon('accessory2') }}</span>
                       <span class="slot-label">饰品</span>
                       <span class="item-name" v-if="player?.equipment?.accessory2">{{ player.equipment.accessory2.name }}</span>
                     </div>
-                    
-                    <!-- 手套 - 左手 -->
-                    <div 
-                      class="equip-slot-visual hand-l" 
-                      :class="{ equipped: player?.equipment?.gloves }"
-                      @click="handleEquipClick('gloves')"
-                    >
+                    <div class="equip-slot-visual hand-l" :class="{ equipped: player?.equipment?.gloves }" @click="handleEquipClick('gloves')">
                       <span class="slot-emoji">{{ getSlotIcon('gloves') }}</span>
                       <span class="slot-label">手套</span>
                       <span class="item-name" v-if="player?.equipment?.gloves">{{ player.equipment.gloves.name }}</span>
                     </div>
-                    
-                    <!-- 靴子 - 脚部 -->
-                    <div 
-                      class="equip-slot-visual feet" 
-                      :class="{ equipped: player?.equipment?.boots }"
-                      @click="handleEquipClick('boots')"
-                    >
+                    <div class="equip-slot-visual feet" :class="{ equipped: player?.equipment?.boots }" @click="handleEquipClick('boots')">
                       <span class="slot-emoji">{{ getSlotIcon('boots') }}</span>
                       <span class="slot-label">靴子</span>
                       <span class="item-name" v-if="player?.equipment?.boots">{{ player.equipment.boots.name }}</span>
                       <span class="empty-tip" v-else>点击装备</span>
                     </div>
                   </div>
-                  
-                  <!-- 属性显示 -->
                   <div class="equip-stats-panel">
                     <div class="stat-title">角色属性</div>
                     <div class="stat-row">
@@ -383,22 +299,13 @@
                   </div>
                 </div>
 
-                <!-- 原有列表展示 -->
                 <div v-show="!showVisualEquipment" class="equipment-section">
                   <h4 class="section-title">角色装备</h4>
                   <div class="equipment-grid">
-                    <div 
-                      v-for="slot in equipmentSlots" 
-                      :key="slot.key"
-                      class="equip-slot"
-                      :class="{ empty: !player?.equipment?.[slot.key], equipped: player?.equipment?.[slot.key] }"
-                      @click="handleEquipClick(slot.key)"
-                    >
+                    <div v-for="slot in equipmentSlots" :key="slot.key" class="equip-slot" :class="{ empty: !player?.equipment?.[slot.key], equipped: player?.equipment?.[slot.key] }" @click="handleEquipClick(slot.key)">
                       <div class="slot-icon">{{ slot.icon }}</div>
                       <div class="slot-name">{{ slot.name }}</div>
-                      <div class="slot-item" v-if="player?.equipment?.[slot.key]">
-                        {{ player.equipment[slot.key].name }}
-                      </div>
+                      <div class="slot-item" v-if="player?.equipment?.[slot.key]">{{ player.equipment[slot.key].name }}</div>
                       <div class="slot-empty" v-else>未装备</div>
                     </div>
                   </div>
@@ -416,46 +323,60 @@
                     </div>
                   </div>
                   <div class="equipment-grid mount-grid">
-                    <div 
-                      v-for="slot in mountSlots" 
-                      :key="slot.key"
-                      class="equip-slot"
-                      :class="{ empty: !player?.equipped_mount_items?.[slot.key], equipped: player?.equipped_mount_items?.[slot.key] }"
-                      @click="handleMountEquipClick(slot.key)"
-                    >
+                    <div v-for="slot in mountSlots" :key="slot.key" class="equip-slot" :class="{ empty: !player?.equipped_mount_items?.[slot.key], equipped: player?.equipped_mount_items?.[slot.key] }" @click="handleMountEquipClick(slot.key)">
                       <div class="slot-icon">{{ slot.icon }}</div>
                       <div class="slot-name">{{ slot.name }}</div>
-                      <div class="slot-item" v-if="player?.equipped_mount_items?.[slot.key]">
-                        {{ player.equipped_mount_items[slot.key].name }}
-                      </div>
+                      <div class="slot-item" v-if="player?.equipped_mount_items?.[slot.key]">{{ player.equipped_mount_items[slot.key].name }}</div>
                       <div class="slot-empty" v-else>未装备</div>
                     </div>
                   </div>
                 </div>
-
-                <el-divider />
-
-                <div class="personal-log-section">
-                  <div class="log-header">
+              </el-card>
+            </el-col>
+            
+            <!-- 中间: 个人日志 (与装备栏平分面积) -->
+            <el-col :span="8">
+              <el-card class="log-card">
+                <template #header>
+                  <div class="card-header">
                     <span>📜 个人日志</span>
                     <div class="log-header-controls">
                       <el-button size="small" text @click="toggleLogMinimize">{{ logMinimized ? '⬆️' : '⬇️' }}</el-button>
                       <el-button size="small" text @click="clearPersonalLog" v-if="personalLog.length > 0 && !logMinimized">清空</el-button>
                     </div>
                   </div>
-                  <div class="log-messages" ref="logRef" v-show="!logMinimized" :style="{ height: logHeight + 'px' }">
-                    <div v-for="(log, i) in personalLog" :key="i" class="log-message" :class="log.type">
-                      <span class="log-time">{{ log.time }}</span>
-                      <span class="log-content">{{ log.content }}</span>
-                    </div>
-                    <div v-if="personalLog.length === 0" class="log-empty">暂无记录</div>
+                </template>
+                <div class="log-messages" ref="logRef" v-show="!logMinimized">
+                  <div v-for="(log, i) in personalLog" :key="i" class="log-message" :class="log.type">
+                    <span class="log-time">{{ log.time }}</span>
+                    <span class="log-content">{{ log.content }}</span>
                   </div>
-                  <div class="log-resize-handle" @mousedown="startResize" v-show="!logMinimized"></div>
+                  <div v-if="personalLog.length === 0" class="log-empty">暂无记录</div>
+                </div>
+                <div class="log-resize-handle" @mousedown="startResize" v-show="!logMinimized"></div>
+              </el-card>
+
+              <el-card v-if="player?.active_buffs && player.active_buffs.length > 0" class="buff-card">
+                <template #header>
+                  <span>🧪 药水BUFF ({{ player.active_buffs.length }})</span>
+                </template>
+                <div class="buff-grid">
+                  <div v-for="(buff, idx) in player.active_buffs" :key="idx" class="buff-item" :class="buff.is_side_effect ? 'buff-debuff' : 'buff-positive'">
+                    <div class="buff-name">{{ buff.name }}</div>
+                    <div class="buff-effects">
+                      <span v-if="buff.attack_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">{{ buff.is_side_effect ? '⚔️' : '⚔️+' }}{{ Math.abs(buff.attack_boost) }}</span>
+                      <span v-if="buff.defense_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">{{ buff.is_side_effect ? '🛡️' : '🛡️+' }}{{ Math.abs(buff.defense_boost) }}</span>
+                      <span v-if="buff.hp_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">{{ buff.is_side_effect ? '❤️' : '❤️+' }}{{ Math.abs(buff.hp_boost) }}</span>
+                      <span v-if="buff.lingqi_boost" :class="buff.is_side_effect ? 'debuff' : 'buff'">{{ buff.is_side_effect ? '⚡' : '⚡+' }}{{ Math.abs(buff.lingqi_boost) }}</span>
+                    </div>
+                    <div class="buff-timer">{{ formatBuffTime(buff.remaining_seconds) }}</div>
+                  </div>
                 </div>
               </el-card>
             </el-col>
             
-            <el-col :span="7">
+            <!-- 右侧: 资产、位置、快捷操作 -->
+            <el-col :span="8">
               <el-card class="info-card">
                 <template #header>
                   <span>💰 资产</span>
@@ -896,7 +817,6 @@ const personalLog = computed(() => {
 
 const logRef = ref(null)
 const logMinimized = ref(false)
-const logHeight = ref(300)
 
 const toggleLogMinimize = () => {
   logMinimized.value = !logMinimized.value
@@ -904,21 +824,6 @@ const toggleLogMinimize = () => {
 
 const startResize = (e) => {
   e.preventDefault()
-  const startY = e.clientY
-  const startHeight = logHeight.value
-  
-  const onMouseMove = (moveEvent) => {
-    const delta = startY - moveEvent.clientY
-    logHeight.value = Math.max(150, Math.min(600, startHeight + delta))
-  }
-  
-  const onMouseUp = () => {
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', onMouseUp)
-  }
-  
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', onMouseUp)
 }
 
 const addPersonalLog = (content, type = 'info') => {
@@ -1477,9 +1382,9 @@ const doGather = async () => {
 
 const loadGatheringInfo = async () => {
   try {
-    const info = await gameStore.wsCall('get_hunting_info')
-    if (info?.gather_info) {
-      gatheringInfo.value = info.gather_info
+    const info = await gameStore.wsCall('get_gather_info')
+    if (info?.data?.gather_info) {
+      gatheringInfo.value = info.data.gather_info
     }
   } catch (e) {
     console.error('Failed to load gathering info:', e)
@@ -1900,11 +1805,83 @@ const forceShowSpawnModal = async () => {
   padding: 16px;
 }
 
-.player-card, .equipment-card, .info-card, .quick-actions {
+.player-card, .equipment-card, .info-card, .quick-actions, .log-card, .buff-card {
   background: linear-gradient(145deg, #252525 0%, #1E1E1E 100%);
   border: 1px solid #3D3D3D;
   color: #F5DEB3;
   border-radius: 8px;
+}
+
+.log-card {
+  height: calc(100vh - 140px);
+  display: flex;
+  flex-direction: column;
+}
+
+.log-card :deep(.el-card__body) {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.log-card .log-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 4px;
+}
+
+.buff-card {
+  margin-top: 12px;
+}
+
+.buff-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.buff-item {
+  padding: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.buff-positive {
+  border-left: 3px solid #4CAF50;
+}
+
+.buff-debuff {
+  border-left: 3px solid #f44336;
+}
+
+.buff-name {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.buff-effects {
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.buff-effects .buff {
+  color: #4CAF50;
+}
+
+.buff-effects .debuff {
+  color: #f44336;
+}
+
+.buff-timer {
+  font-size: 11px;
+  color: #888;
+  margin-top: 4px;
 }
 
 :deep(.el-card__header) {
