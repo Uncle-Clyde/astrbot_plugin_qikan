@@ -15,13 +15,30 @@ from .constants import (
 from .models import Player
 
 
-async def add_item(player: Player, item_id: str, count: int = 1) -> dict:
-    """给玩家添加物品。"""
+async def add_item(player: Player, item_id: str, count: int = 1, log_source: str = "") -> dict:
+    """给玩家添加物品。
+
+    Args:
+        player: 玩家对象
+        item_id: 物品ID
+        count: 数量
+        log_source: 日志来源描述（如"狩猎"、"采集"等）
+    """
+    item_name = item_id
     if item_id not in ITEM_REGISTRY:
-        return {"success": False, "message": "物品不存在"}
+        ITEM_REGISTRY[item_id] = ItemDef(
+            item_id=item_id,
+            name=item_id.replace("_", " ").title(),
+            item_type="material",
+            description=f"自动注册的物品",
+            effect={},
+        )
     player.inventory[item_id] = player.inventory.get(item_id, 0) + count
     item = ITEM_REGISTRY[item_id]
-    return {"success": True, "message": f"获得 {item.name} x{count}"}
+    item_name = item.name
+
+    source_desc = f"（{log_source}）" if log_source else ""
+    return {"success": True, "message": f"获得 {item_name} x{count}{source_desc}", "item_name": item_name, "count": count}
 
 
 async def use_item(player: Player, item_id: str, count: int = 1) -> dict:

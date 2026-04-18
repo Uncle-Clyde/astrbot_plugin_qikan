@@ -372,7 +372,8 @@ class GameEngine:
                     player = await self.get_player(user_id)
                     if player:
                         from .inventory import add_item
-                        await add_item(player, task["reward_item_id"], task["reward_item_count"])
+                        await add_item(player, task["reward_item_id"], task["reward_item_count"], "任务奖励")
+                        await self._notify_player_update(player)
 
                 completed.append({
                     "task_id": task["task_id"],
@@ -486,6 +487,7 @@ class GameEngine:
 
         player.last_checkin_date = today
         await self._save_player(player)
+        await self._notify_player_update(player)
 
         return {
             "success": True,
@@ -1686,13 +1688,14 @@ class GameEngine:
 
         # 返回技能卷轴到背包
         scroll_id = get_gongfa_scroll_id(gongfa_id)
-        player.inventory[scroll_id] = player.inventory.get(scroll_id, 0) + 1
+        await add_item(player, scroll_id, 1, "遗忘战技")
 
         # 重置技能槽位和熟练度
         setattr(player, slot, "无")
         setattr(player, f"{slot}_mastery", 0)
         setattr(player, f"{slot}_exp", 0)
         await self._save_player(player)
+        await self._notify_player_update(player)
         return {"success": True, "message": f"你已遗忘技能【{name}】，获得技能卷轴"}
 
     def _auto_unequip_invalid_gongfa(self, player) -> list[str]:
@@ -1849,11 +1852,11 @@ class GameEngine:
             stored_item_id = get_stored_heart_method_item_id(old_method_id)
             if old_method_id not in player.stored_heart_methods:
                 player.stored_heart_methods[old_method_id] = expire_time
-                player.inventory[stored_item_id] = player.inventory.get(stored_item_id, 0) + 1
+                await add_item(player, stored_item_id, 1, "保留被动技能")
                 messages.append(f"保留【{old_name}】为技能道具（三天期限）")
             else:
                 if player.inventory.get(stored_item_id, 0) <= 0:
-                    player.inventory[stored_item_id] = 1
+                    await add_item(player, stored_item_id, 1, "保留被动技能")
                 messages.append(f"保留【{old_name}】为技能道具（沿用原过期时间）")
 
         player.heart_method = new_method_id
@@ -2167,7 +2170,7 @@ class GameEngine:
             except Exception:
                 logger.exception("战争大陆：定时清理集市过期商品异常")
 
-    def _auto_unequip_invalid_equipment(self, player: Player) -> list[str]:
+def _auto_unequip_invalid_equipment(self, player: Player) -> list[str]:
         """自动卸下当前爵位无法装备的物品并放回背包。"""
         removed: list[str] = []
         for slot in ("weapon", "armor"):
@@ -3568,7 +3571,8 @@ class GameEngine:
                 from .inventory import add_item
                 player = await self.get_player(user_id)
                 if player:
-                    await add_item(player, task["reward_item_id"], task["reward_item_count"])
+                    await add_item(player, task["reward_item_id"], task["reward_item_count"], "家族任务奖励")
+                    await self._notify_player_update(player)
                     item_name = task.get("reward_item_name", task["reward_item_id"])
                     reward_msg = reward_msg + f"、{task['reward_item_count']}个{item_name}"
 
@@ -3615,10 +3619,13 @@ class GameEngine:
         player = await self.get_player(user_id)
         if not player:
             return {"success": False, "message": "你还没有角色，请先创建"}
-        
+
         result = gathering.gather_herbs(player)
         if result["success"]:
+            for herb in result.get("herbs", []):
+                await add_item(player, herb["herb_id"], 1, "采集")
             await self._save_player(player)
+            await self._notify_player_update(player)
         return result
 
     async def craft_item(self, user_id: str, recipe_id: str) -> dict:
@@ -3887,41 +3894,43 @@ class GameEngine:
         player = await self.get_player(user_id)
         if not player:
             return {"success": False, "message": "你还没有角色"}
-        
+
         HUNT_LINGQI_COST = 15
-        
+
         if player.lingqi < HUNT_LINGQI_COST:
             return {"success": False, "message": f"体力不足，需要 {HUNT_LINGQI_COST} 点体力"}
-        
+
         if wildlife_id and wildlife_id in hunting.WILDLIFE:
             wildlife = hunting.WILDLIFE[wildlife_id]
         else:
             import random
             wildlife_list = list(hunting.WILDLIFE.values())
             wildlife = random.choice(wildlife_list)
-        
+
         exp_reward = wildlife.exp_reward
         gold_reward = wildlife.gold_reward
-        
+
         drops = hunting.calculate_hunt_drops(wildlife)
-        
+
         player.exp = getattr(player, 'exp', 0) + exp_reward
         player.spirit_stones = getattr(player, 'spirit_stones', 0) + gold_reward
         player.lingqi -= HUNT_LINGQI_COST
-        
+
         if not hasattr(player, 'hunting_materials'):
             player.hunting_materials = {}
-        
+
         drop_texts = []
         for item_id, count in drops.items():
+            result = await add_item(player, item_id, count, "狩猎")
             player.hunting_materials[item_id] = player.hunting_materials.get(item_id, 0) + count
             item_info = hunting.HUNT_DROPS.get(item_id, {})
             drop_texts.append(f"{item_info.get('name', item_id)}x{count}")
-        
+
         await self._save_player(player)
-        
+        await self._notify_player_update(player)
+
         drops_str = "、".join(drop_texts) if drop_texts else "无"
-        
+
         return {
             "success": True,
             "message": f"消耗{HUNT_LINGQI_COST}点体力，猎杀了{wildlife.name}！获得经验{exp_reward}，金币{gold_reward}，掉落：{drops_str}",

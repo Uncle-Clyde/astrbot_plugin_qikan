@@ -130,22 +130,17 @@ def gather_herbs(player) -> dict:
             "name": herb.name,
             "heal_amount": herb.heal_amount,
         })
-        
-        if not hasattr(player, 'inventory'):
-            player.inventory = {}
-        player.inventory[herb.herb_id] = player.inventory.get(herb.herb_id, 0) + 1
-    
+
     herb_names = [h["name"] for h in gathered]
     count_str = "、".join(herb_names[:3])
     if len(herb_names) > 3:
         count_str += f" 等({len(herb_names)}种)"
-    
+
     return {
         "success": True,
         "message": f"消耗{GATHER_LINGQI_COST}点体力，采集到: {count_str}",
         "herbs": gathered,
         "lingqi_remaining": player.lingqi,
-        "inventory": player.inventory,
     }
 
 
