@@ -77,9 +77,10 @@ class DataManager:
                 await tx.execute("INSERT ...", (...))
             # 离开 with 块自动 commit；异常则自动 rollback
         """
-        conn = await aiosqlite.connect(self._db_path)
+        conn = await aiosqlite.connect(self._db_path, timeout=30.0)
         conn.row_factory = aiosqlite.Row
         await conn.execute("PRAGMA journal_mode=WAL")
+        await conn.execute("PRAGMA busy_timeout=30000")
         await conn.execute("BEGIN IMMEDIATE")
         try:
             yield conn
@@ -93,10 +94,12 @@ class DataManager:
     async def initialize(self):
         """初始化数据目录、打开数据库、建表、迁移旧数据。"""
         os.makedirs(self._data_dir, exist_ok=True)
-        self.db = await aiosqlite.connect(self._db_path)
+        self.db = await aiosqlite.connect(self._db_path, timeout=30.0)
         self.db.row_factory = aiosqlite.Row
         await self.db.execute("PRAGMA journal_mode=WAL")
+        await self.db.execute("PRAGMA busy_timeout=30000")
         await self._create_tables()
+        await self._ensure_player_schema()
         await self._migrate_json_data()
 
     async def _create_tables(self):
@@ -152,7 +155,10 @@ class DataManager:
                 last_adventure_time REAL DEFAULT 0.0,
                 death_count         INTEGER DEFAULT 0,
                 unified_msg_origin  TEXT,
-                password_hash       TEXT
+                password_hash       TEXT,
+                level             INTEGER DEFAULT 1,
+                unallocated_points INTEGER DEFAULT 0,
+                bandit_stats       TEXT DEFAULT '{}'
             )
         """)
         # 爵位配置表（管理员可维护）
@@ -1063,6 +1069,15 @@ class DataManager:
         except Exception as e:
             if "duplicate column name" not in str(e).lower():
                 logger.warning("添加列失败 %s.%s: %s", table, column, e)  # 列已存在
+
+    async def _ensure_player_schema(self, force: bool = False):
+        """确保玩家相关旧表已经自动升级到当前结构。"""
+        try:
+            await self._alter_add_column("players", "level", "INTEGER DEFAULT 1")
+            await self._alter_add_column("players", "unallocated_points", "INTEGER DEFAULT 0")
+            await self._alter_add_column("players", "bandit_stats", "TEXT DEFAULT '{}'")
+        except Exception:
+            pass
 
     async def _ensure_sect_schema(self, force: bool = False):
         """确保家族相关旧表已经自动升级到当前结构。"""
@@ -2352,8 +2367,9 @@ rows,
         """以单个事务提交商店购买记录和玩家状态。"""
         conn: aiosqlite.Connection | None = None
         try:
-            conn = await aiosqlite.connect(self._db_path)
-            await conn.execute("PRAGMA busy_timeout = 30000")
+            conn = await aiosqlite.connect(self._db_path, timeout=30.0)
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA busy_timeout=30000")
             await conn.execute("BEGIN IMMEDIATE")
 
             sold_today = 0
@@ -2654,7 +2670,7 @@ sect.get("warehouse_capacity", 200),
                    (sect_id, name, leader_id, description, level, spirit_stones,
                     max_members, join_policy, min_realm, created_at,
                     announcement, warehouse_capacity)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     sect["sect_id"],
                     sect["name"],
@@ -2935,8 +2951,9 @@ sect.get("warehouse_capacity", 200),
         """
         conn: aiosqlite.Connection | None = None
         try:
-            conn = await aiosqlite.connect(self._db_path)
-            await conn.execute("PRAGMA busy_timeout = 30000")
+            conn = await aiosqlite.connect(self._db_path, timeout=30.0)
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA busy_timeout=30000")
             await conn.execute("BEGIN IMMEDIATE")
 
             # 复检仓库容量
@@ -3008,8 +3025,9 @@ sect.get("warehouse_capacity", 200),
         """
         conn: aiosqlite.Connection | None = None
         try:
-            conn = await aiosqlite.connect(self._db_path)
-            await conn.execute("PRAGMA busy_timeout = 30000")
+            conn = await aiosqlite.connect(self._db_path, timeout=30.0)
+            await conn.execute("PRAGMA journal_mode=WAL")
+            await conn.execute("PRAGMA busy_timeout=30000")
             await conn.execute("BEGIN IMMEDIATE")
 
             # 条件扣贡献点

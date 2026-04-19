@@ -1337,5 +1337,266 @@ def give_gift_to_npc_compat(
     }
 
 
+# ══════════════════════════════════════════════════════════════════════
+# NPC任务系统
+# ══════════════════════════════════════════════════════════════════════
+
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+class QuestDifficulty:
+    """任务难度等级"""
+    EASY = "easy"
+    NORMAL = "normal"
+    HARD = "hard"
+    LEGENDARY = "legendary"
+
+
+QUEST_DIFFICULTY_EASY = "easy"
+QUEST_DIFFICULTY_NORMAL = "normal"
+QUEST_DIFFICULTY_HARD = "hard"
+QUEST_DIFFICULTY_LEGENDARY = "legendary"
+
+
+@dataclass
+class NPCQuest:
+    """NPC任务定义"""
+    quest_id: str
+    name: str
+    description: str
+    icon: str = "📋"
+    difficulty: str = "easy"
+    
+    npc_type: str = ""  # 对应NPC类型
+    
+    min_favor: int = 0  # 最低好感要求
+    min_level: int = 1  # 最低等级要求
+    
+    exp_reward: int = 100
+    gold_reward: int = 50
+    item_reward: str = ""
+    item_count: int = 0
+    
+    target_type: str = ""  # kill / collect / escort / trade / explore
+    target_id: str = ""
+    target_count: int = 1
+    
+    requires_combat: bool = False
+
+
+FAVOR_REQUIREMENTS = {
+    QUEST_DIFFICULTY_EASY: 0,
+    QUEST_DIFFICULTY_NORMAL: 25,
+   QUEST_DIFFICULTY_HARD: 50,
+    QUEST_DIFFICULTY_LEGENDARY: 80,
+}
+
+
+REWARD_TIERS = {
+    QUEST_DIFFICULTY_EASY: {"exp": (50, 100), "gold": (30, 50), "item": False},
+    QUEST_DIFFICULTY_NORMAL: {"exp": (100, 200), "gold": (50, 100), "item": True},
+    QUEST_DIFFICULTY_HARD: {"exp": (200, 400), "gold": (100, 200), "item": True},
+    QUEST_DIFFICULTY_LEGENDARY: {"exp": (500, 800), "gold": (200, 400), "item": True},
+}
+
+
+def _create_quest(
+    quest_id: str,
+    name: str,
+    description: str,
+    npc_type: str,
+    difficulty: str,
+    target_type: str,
+    target_id: str = "",
+    target_count: int = 1,
+    min_level: int = 1,
+    requires_combat: bool = False,
+    icon: str = "📋",
+    item_reward: str = "",
+) -> NPCQuest:
+    """创建任务的辅助函数"""
+    tiers = REWARD_TIERS[difficulty]
+    
+    return NPCQuest(
+        quest_id=quest_id,
+        name=name,
+        description=description,
+        icon=icon,
+        difficulty=difficulty,
+        npc_type=npc_type,
+        min_favor=FAVOR_REQUIREMENTS[difficulty],
+        min_level=min_level,
+        exp_reward=tiers["exp"][0],
+        gold_reward=tiers["gold"][0],
+        item_reward=item_reward if tiers["item"] else "",
+        item_count=1 if tiers["item"] else 0,
+        target_type=target_type,
+        target_id=target_id,
+        target_count=target_count,
+        requires_combat=requires_combat,
+    )
+
+
+NPC_QUESTS: dict[str, list[NPCQuest]] = {
+    "mayor": [
+        _create_quest("mayor_bandit_easy", "清剿附近劫匪", "消灭在城镇附近骚扰的劫匪", "mayor", QUEST_DIFFICULTY_EASY, "kill", "mountain_weak", 3, 3),
+        _create_quest("mayor_gather_easy", "收集基础资源", "收集谷物和木材用于城镇建设", "mayor", QUEST_DIFFICULTY_EASY, "collect", "grain", 5, 1),
+        _create_quest("mayor_deliver_easy", "运送物资", "将物资送到临近���镇", "mayor", QUEST_DIFFICULTY_EASY, "escort", "", 10, 5),
+        
+        _create_quest("mayor_bandit_normal", "讨伐山贼头目", "击败山贼头目", "mayor", QUEST_DIFFICULTY_NORMAL, "kill", "mountain_strong", 1, 8, True),
+        _create_quest("mayor_escort_normal", "护送商人", "护送商人安全通过危险路段", "mayor", QUEST_DIFFICULTY_NORMAL, "escort", "", 1, 10),
+        _create_quest("mayor_collect_normal", "收集稀有矿石", "收集银矿石用于城镇发展", "mayor", QUEST_DIFFICULTY_NORMAL, "collect", "silver", 5, 12),
+        
+        _create_quest("mayor_explore_hard", "探索副本", "探索废弃矿洞并击败首脑", "mayor", QUEST_DIFFICULTY_HARD, "explore", "abandoned_mine", 1, 15, True, "⛏️", "iron_ore"),
+        _create_quest("mayor_defend_hard", "守卫城镇", "击退来犯的敌人", "mayor", QUEST_DIFFICULTY_HARD, "kill", "", 10, 18, True, "🛡️"),
+        _create_quest("mayor_trade_hard", "远途贸易", "将货物运往远方城镇出售", "mayor", QUEST_DIFFICULTY_HARD, "trade", "wine", 20, 15),
+        
+        _create_quest("mayor_legendary", "传奇赏金", "讨伐为祸一方的传奇BOSS", "mayor", QUEST_DIFFICULTY_LEGENDARY, "kill", "boss_lord", 1, 20, True, "👑", "legendary_ore"),
+    ],
+    
+    "merchant": [
+        _create_quest("merchant_buy_easy", "购买商品", "购买指定的商品", "merchant", QUEST_DIFFICULTY_EASY, "collect", "grain", 5, 1),
+        _create_quest("merchant_survey_easy", "调查物价", "调查其他城镇的物价", "merchant", QUEST_DIFFICULTY_EASY, "collect", "", 3, 3),
+        
+        _create_quest("merchant_transport_normal", "运输货物", "将货物运往其他城镇", "merchant", QUEST_DIFFICULTY_NORMAL, "trade", "wine", 10, 8),
+        _create_quest("merchant_rare_normal", "寻找稀有商品", "找到市场上稀缺的商品", "merchant", QUEST_DIFFICULTY_NORMAL, "collect", "silk", 3, 10),
+        
+        _create_quest("merchant_exotic_hard", "寻找异宝", "寻找传说中的稀有宝物", "merchant", QUEST_DIFFICULTY_HARD, "collect", "gem", 3, 16, False, "💎"),
+        _create_quest("merchant_trade_hard", "大规模贸易", "组织商队进行大规模贸易", "merchant", QUEST_DIFFICULTY_HARD, "trade", "spice", 30, 18),
+        
+        _create_quest("merchant_legendary", "传奇交易", "参与传奇级别的商品交易", "merchant", QUEST_DIFFICULTY_LEGENDARY, "trade", "legendary_ore", 10, 20, False, "🏆"),
+    ],
+    
+    "blacksmith": [
+        _create_quest("smith_ore_easy", "收集铁矿石", "收集铁矿石用于锻造", "blacksmith", QUEST_DIFFICULTY_EASY, "collect", "iron", 5, 1),
+        _create_quest("smith_bone_easy", "收集兽骨", "收集兽骨用于工具制作", "blacksmith", QUEST_DIFFICULTY_EASY, "collect", "bone", 3, 1),
+        
+        _create_quest("smith_weapon_normal", "打造武器", "使用铁矿石打造武器", "blacksmith", QUEST_DIFFICULTY_NORMAL, "collect", "iron", 10, 8),
+        _create_quest("smith_rare_normal", "收集稀有矿石", "收集银矿石用于精炼", "blacksmith", QUEST_DIFFICULTY_NORMAL, "collect", "silver", 5, 10),
+        
+        _create_quest("smith_legend_hard", "寻找传说矿石", "寻找传说中的矿石", "blacksmith", QUEST_DIFFICULTY_HARD, "collect", "magic_stone", 3, 16, False, "✨", "dragon_scale"),
+        _create_quest("smith_forge_hard", "锻造史诗武器", "使用稀有材料锻造武器", "blacksmith", QUEST_DIFFICULTY_HARD, "collect", "gold", 5, 18, False, "⚔️", "phoenix_feather"),
+        
+        _create_quest("smith_legendary", "传奇锻造", "参与传奇武器的锻造", "blacksmith", QUEST_DIFFICULTY_LEGENDARY, "collect", "legendary_ore", 3, 20, False, "🔥"),
+    ],
+    
+    "tavern_keeper": [
+        _create_quest("tavern_ingredient_easy", "收集原料", "收集酿造麦酒的原料", "tavern_keeper", QUEST_DIFFICULTY_EASY, "collect", "grain", 5, 1),
+        _create_quest("tavern_drink_easy", "驱赶醉汉", "帮助维持酒馆秩序", "tavern_keeper", QUEST_DIFFICULTY_EASY, "kill", "drunk", 3, 1, True),
+        
+        _create_quest("tavern_message_normal", "传递消息", "将消息送到其他城镇", "tavern_keeper", QUEST_DIFFICULTY_NORMAL, "escort", "", 1, 8),
+        _create_quest("tavern_info_normal", "收集情报", "从各地收集有趣的情报", "tavern_keeper", QUEST_DIFFICULTY_NORMAL, "collect", "rumor", 3, 10),
+        
+        _create_quest("tavern_lost_hard", "寻找失踪旅客", "寻找在旅途中失踪的客人", "tavern_keeper", QUEST_DIFFICULTY_HARD, "explore", "abandoned_mine", 1, 16, True),
+        _create_quest("tavern_rare_hard", "寻找稀有酒", "寻找传说中的美酒", "tavern_keeper", QUEST_DIFFICULTY_HARD, "collect", "gem", 3, 18, False, "🍷"),
+        
+        _create_quest("tavern_legendary", "传奇旅客", "接待传说中的旅客", "tavern_keeper", QUEST_DIFFICULTY_LEGENDARY, "escort", "", 1, 20),
+    ],
+    
+    "guard_captain": [
+        _create_quest("guard_patrol_easy", "巡逻城镇", "在城镇内巡逻", "guard_captain", QUEST_DIFFICULTY_EASY, "kill", "thief", 3, 1, True),
+        _create_quest("guard_remove_easy", "驱逐流浪者", "驱逐在城镇捣乱的流浪者", "guard_captain", QUEST_DIFFICULTY_EASY, "kill", "beggar", 3, 1, True),
+        
+        _create_quest("guard_arrest_normal", "逮捕通缉犯", "逮捕城镇的通缉犯", "guard_captain", QUEST_DIFFICULTY_NORMAL, "kill", "bandit", 5, 10, True),
+        _create_quest("guard_defend_normal", "守卫城镇", "守卫城镇入口", "guard_captain", QUEST_DIFFICULTY_NORMAL, "kill", "", 10, 12, True),
+        
+        _create_quest("guard_raid_hard", "突袭匪窝", "突袭匪徒的藏身之处", "guard_captain", QUEST_DIFFICULTY_HARD, "explore", "bandit_stronghold", 1, 16, True),
+        _create_quest("guard_wave_hard", "抵御袭击", "击退大量敌人的袭击", "guard_captain", QUEST_DIFFICULTY_HARD, "kill", "", 20, 18, True),
+        
+        _create_quest("guard_legendary", "守卫传奇", "守卫城镇免受传奇威胁", "guard_captain", QUEST_DIFFICULTY_LEGENDARY, "kill", "boss_lord", 1, 20, True),
+    ],
+    
+    "village_elder": [
+        _create_quest("elder_farm_easy", "帮忙农活", "帮助村民完成农活", "village_elder", QUEST_DIFFICULTY_EASY, "collect", "grain", 5, 1),
+        _create_quest("elder_animal_easy", "驱赶野兽", "驱赶威胁村庄的野兽", "village_elder", QUEST_DIFFICULTY_EASY, "kill", "wolf", 3, 1, True),
+        
+        _create_quest("elder_protect_normal", "保护村民", "保护村民免受威胁", "village_elder", QUEST_DIFFICULTY_NORMAL, "kill", "bandit", 5, 8, True),
+        _create_quest("elder_livestock_normal", "寻找家畜", "寻找村民走失的牲畜", "village_elder", QUEST_DIFFICULTY_NORMAL, "collect", "cattle", 3, 10),
+        
+        _create_quest("elder_bandit_hard", "击退劫匪", "击退袭击村庄的劫匪", "village_elder", QUEST_DIFFICULTY_HARD, "kill", "mountain_strong", 10, 16, True),
+        _create_quest("elder_defend_hard", "修建防御", "帮助村庄修建防御设施", "village_elder", QUEST_DIFFICULTY_HARD, "collect", "wood", 20, 15),
+        
+        _create_quest("elder_legendary", "拯救村庄", "在危机中拯救村庄", "village_elder", QUEST_DIFFICULTY_LEGENDARY, "kill", "boss_lord", 1, 20, True),
+    ],
+    
+    "villager": [
+        _create_quest("villager_help_easy", "帮忙干活", "帮助村民完成日常工作", "villager", QUEST_DIFFICULTY_EASY, "collect", "grain", 3, 1),
+        _create_quest("villager_deliver_easy", "送货", "送货到邻居家", "villager", QUEST_DIFFICULTY_EASY, "escort", "", 1, 1),
+        
+        _create_quest("villager_family_normal", "寻找家人", "帮助寻找失踪的家人", "villager", QUEST_DIFFICULTY_NORMAL, "explore", "forest", 1, 10),
+        
+        _create_quest("villager_rare_hard", "寻找传家宝", "帮助寻找家族遗失的传家宝", "villager", QUEST_DIFFICULTY_HARD, "collect", "gem", 1, 18, False, "💍"),
+    ],
+    
+    "horse_trader": [
+        _create_quest("horse_find_easy", "寻找走失的马", "帮助寻找走失的马匹", "horse_trader", QUEST_DIFFICULTY_EASY, "collect", "horse", 1, 1),
+        
+        _create_quest("horse_escort_normal", "护送马匹", "护送马匹前往城镇", "horse_trader", QUEST_DIFFICULTY_NORMAL, "escort", "", 5, 10),
+        
+        _create_quest("horse_rare_hard", "寻找良马", "寻找传说中的良马", "horse_trader", QUEST_DIFFICULTY_HARD, "collect", "war_horse", 1, 16, False, "🐎"),
+        
+        _create_quest("horse_legendary", "传奇马匹", "参与传奇马匹的交易", "horse_trader", QUEST_DIFFICULTY_LEGENDARY, "escort", "legendary_horse", 1, 20),
+    ],
+}
+
+
+def get_npc_quests(npc_type: str, player_level: int, player_favor: int) -> list[dict]:
+    """获取NPC的可用任务列表"""
+    quests = NPC_QUESTS.get(npc_type, [])
+    result = []
+    
+    for quest in quests:
+        if player_level < quest.min_level:
+            continue
+        if player_favor < quest.min_favor:
+            continue
+        
+        result.append({
+            "quest_id": quest.quest_id,
+            "name": quest.name,
+            "description": quest.description,
+            "icon": quest.icon,
+            "difficulty": quest.difficulty,
+            "min_favor": quest.min_favor,
+            "min_level": quest.min_level,
+            "exp_reward": quest.exp_reward,
+            "gold_reward": quest.gold_reward,
+            "item_reward": quest.item_reward,
+            "item_count": quest.item_count,
+            "target_type": quest.target_type,
+            "target_id": quest.target_id,
+            "target_count": quest.target_count,
+            "requires_combat": quest.requires_combat,
+        })
+    
+    return result
+
+
+def get_quest_by_id(quest_id: str) -> Optional[NPCQuest]:
+    """根据ID获取任务"""
+    for quests in NPC_QUESTS.values():
+        for quest in quests:
+            if quest.quest_id == quest_id:
+                return quest
+    return None
+
+
+def get_quest_favor_requirement(difficulty: str) -> int:
+    """获取任务难度对应的好感度要求"""
+    return FAVOR_REQUIREMENTS.get(difficulty, 0)
+
+
+def get_difficulty_display(difficulty: str) -> str:
+    """获取难度显示名称"""
+    display = {
+        QUEST_DIFFICULTY_EASY: "简单",
+        QUEST_DIFFICULTY_NORMAL: "中等",
+        QUEST_DIFFICULTY_HARD: "困难",
+        QUEST_DIFFICULTY_LEGENDARY: "史诗",
+    }
+    return display.get(difficulty, difficulty)
+
+
 # engine.py compatibility alias
 give_gift_to_npc = give_gift_to_npc_compat

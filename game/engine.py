@@ -2170,7 +2170,7 @@ class GameEngine:
             except Exception:
                 logger.exception("战争大陆：定时清理集市过期商品异常")
 
-def _auto_unequip_invalid_equipment(self, player: Player) -> list[str]:
+    def _auto_unequip_invalid_equipment(self, player: Player) -> list[str]:
         """自动卸下当前爵位无法装备的物品并放回背包。"""
         removed: list[str] = []
         for slot in ("weapon", "armor"):
