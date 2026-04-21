@@ -164,14 +164,19 @@ class GameEngine:
         init_level_system()
         
         # 初始化城市任务系统
-        # city_quest_system.init_city_quest_system()  # 移除不存在的函数调用
+        from .city_quest_manager import CityQuestManager
+        self.city_quest = CityQuestManager(self._data_manager)
+        await self.city_quest.initialize()
         
         # 初始化传奇BOSS系统
-        # legendary_system.init_legendary_system()  # 移除不存在的函数调用
+        from .legendary_manager import LegendaryManager
+        self.legendary = LegendaryManager(self._data_manager)
+        await self.legendary.initialize()
         
         # 初始化随机事件系统
-        # random_events.init_random_events()  # 移除不存在的函数调用
-        
+        from . import random_events as random_events_mod
+        self._random_events = random_events_mod
+
         # 初始化 TeamSpeak 中间件
         self.ts_middleware = TeamSpeakMiddleware()
         if hasattr(self, '_config') and self._config:
@@ -5277,3 +5282,284 @@ class GameEngine:
                 "message": "战败了……再接再厉！",
                 "result": "lose",
             }
+
+    # ══════════════════════════════════════════════════════════════
+    # 城市任务系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def init_city_quest_system(self):
+        """初始化城市任务系统"""
+        from .city_quest_manager import CityQuestManager
+        if not hasattr(self, 'city_quest'):
+            self.city_quest = CityQuestManager(self._data_manager)
+            await self.city_quest.initialize()
+
+    async def get_city_quests(self, user_id: str) -> dict:
+        """获取城市任务列表"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        if not hasattr(self, 'city_quest'):
+            await self.init_city_quest_system()
+
+        location_id = player.map_state.current_location
+        if not location_id:
+            return {"success": False, "message": "当前不在任何城镇"}
+
+        from .map_system import TOWNS
+        if location_id not in TOWNS:
+            return {"success": False, "message": "当前不在城镇，无法接取城市任务"}
+
+        available = await self.city_quest.get_available_quests(
+            location_id, player.level, player.realm
+        )
+        active = await self.city_quest.get_active_quests(user_id)
+
+        return {
+            "success": True,
+            "location_id": location_id,
+            "location_name": TOWNS[location_id].name,
+            "available_quests": available,
+            "active_quests": active,
+        }
+
+    async def accept_city_quest(self, user_id: str, quest_id: str) -> dict:
+        """接受城市任务"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        if not hasattr(self, 'city_quest'):
+            await self.init_city_quest_system()
+
+        location_id = player.map_state.current_location
+        if not location_id:
+            return {"success": False, "message": "当前不在任何城镇"}
+
+        active = await self.city_quest.get_active_quests(user_id)
+        if len(active) >= 5:
+            return {"success": False, "message": "进行中的任务已达上限(5个)，请先完成现有任务"}
+
+        from .map_system import TOWNS
+        if location_id not in TOWNS:
+            return {"success": False, "message": "当前不在城镇"}
+
+        success = await self.city_quest.accept_quest(user_id, quest_id, location_id)
+        if success:
+            return {
+                "success": True,
+                "message": f"已接受任务：{quest_id}",
+                "quest_id": quest_id,
+            }
+        return {"success": False, "message": "接受任务失败，可能已完成或不存在"}
+
+    async def complete_city_quest(self, user_id: str, quest_id: str) -> dict:
+        """提交城市任务"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        if not hasattr(self, 'city_quest'):
+            await self.init_city_quest_system()
+
+        active = await self.city_quest.get_active_quests(user_id)
+        quest = None
+        for q in active:
+            if q["quest_id"] == quest_id:
+                quest = q
+                break
+
+        if not quest:
+            return {"success": False, "message": "任务不存在"}
+
+        exp_reward = quest.get("exp_reward", 0)
+        gold_reward = quest.get("gold_reward", 0)
+
+        player.exp += exp_reward
+        player.spirit_stones += gold_reward
+
+        result = await self.city_quest.complete_quest(
+            user_id, quest_id, exp_reward, gold_reward
+        )
+        await self._save_player(player)
+
+        msg = f"任务完成！获得{exp_reward}经验，{gold_reward}第纳尔"
+        return {
+            "success": True,
+            "message": msg,
+            "exp_reward": exp_reward,
+            "gold_reward": gold_reward,
+        }
+
+    async def update_city_quest_progress(
+        self, user_id: str, quest_type: str, count: int = 1
+    ) -> dict:
+        """更新城市任务进度（战斗系统调用）"""
+        if not hasattr(self, 'city_quest'):
+            return {"updated": False}
+
+        active = await self.city_quest.get_active_quests(user_id)
+        updated = []
+
+        for quest in active:
+            target_type = quest.get("quest_type", "").lower()
+            if target_type == quest_type.lower():
+                result = await self.city_quest.increment_progress(
+                    user_id, quest["quest_id"], count
+                )
+                if result.get("success"):
+                    progress = result.get("progress", 0)
+                    target = quest.get("target_count", 1)
+                    quest_id = quest["quest_id"]
+                    if progress >= target:
+                        await self.complete_city_quest(user_id, quest_id)
+                        updated.append(quest_id)
+
+        return {"updated": updated}
+
+    # ══════════════════════════════════════════════════════════════
+    # 传奇BOSS系统
+    # ══════════════════════════════════════════════════════════════
+
+    async def init_legendary_system(self):
+        """初始化传奇BOSS系统"""
+        from .legendary_manager import LegendaryManager
+        if not hasattr(self, 'legendary'):
+            self.legendary = LegendaryManager(self._data_manager)
+            await self.legendary.initialize()
+
+    async def get_legendary_bosses(self, user_id: str = "") -> dict:
+        """获取传奇BOSS列表"""
+        if not hasattr(self, 'legendary'):
+            await self.init_legendary_system()
+
+        bosses = await self.legendary.get_all_bosses_status()
+        
+        player_drops = {}
+        player_collection = {}
+        if user_id:
+            player_drops, _ = await self.legendary.get_player_drops(user_id)
+            player_collection = await self.legendary.get_player_collection_summary(user_id)
+
+        return {
+            "success": True,
+            "bosses": bosses,
+            "player_drops": player_drops,
+            "collection": player_collection,
+        }
+
+    async def spawn_legendary_boss(self, boss_id: str = "") -> dict:
+        """尝试刷新传奇BOSS（管理员/定时任务调用）"""
+        if not hasattr(self, 'legendary'):
+            await self.init_legendary_system()
+
+        if boss_id:
+            max_level = await self.legendary.get_server_max_level()
+            return await self.legendary.try_spawn_boss(boss_id, max_level)
+        
+        import legendary_system as ls
+        results = []
+        max_level = await self.legendary.get_server_max_level()
+        
+        for boss_id in ls.LEGENDARY_BOSSES:
+            if ls.can_legendary_boss_respawn(boss_id):
+                result = await self.legendary.try_spawn_boss(boss_id, max_level)
+                if result.get("success"):
+                    results.append(result.get("message"))
+        
+        if results:
+            return {"success": True, "message": "\n".join(results)}
+        return {"success": False, "message": "暂无BOSS可刷新"}
+
+    async def challenge_legendary_boss(self, user_id: str, boss_id: str) -> dict:
+        """挑战传奇BOSS"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        if not hasattr(self, 'legendary'):
+            await self.init_legendary_system()
+
+        boss_status = await self.legendary.get_boss_status(boss_id)
+        if not boss_status:
+            return {"success": False, "message": "BOSS不存在"}
+
+        if not boss_status.get("is_alive"):
+            refresh_days = "周三/周日"
+            return {"success": False, "message": f"{boss_status['name']}尚未降临，请等待{refresh_days}刷新"}
+
+        if player.level < boss_status.get("level", 30) - 10:
+            return {"success": False, "message": f"等级不足，需要{boss_status.get('level', 30) - 10}级以上"}
+
+        import legendary_system as ls
+        boss_def = ls.LEGENDARY_BOSSES.get(boss_id)
+        
+        player.combat_state = {
+            "enemy_type": "legendary_boss",
+            "enemy_id": boss_id,
+            "enemy_name": boss_def.name,
+            "enemy_hp": boss_status.get("hp", boss_def.hp),
+            "enemy_max_hp": boss_status.get("max_hp", boss_def.hp),
+            "enemy_attack": boss_def.attack,
+            "enemy_defense": boss_def.defense,
+            "enemy_level": boss_status.get("level", boss_def.level),
+        }
+        await self._save_player(player)
+
+        return {
+            "success": True,
+            "message": f"你遭遇了{boss_def.name}！一场恶战即将开始！",
+            "boss": boss_status,
+            "combat_start": True,
+        }
+
+    async def defeat_legendary_boss(self, user_id: str, boss_id: str) -> dict:
+        """击败传奇BOSS，发放奖励"""
+        player = await self.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "你还没有角色"}
+
+        if not hasattr(self, 'legendary'):
+            await self.init_legendary_system()
+
+        boss_def = ls.LEGENDARY_BOSSES.get(boss_id) if hasattr(ls, 'LEGENDARY_BOSSES') else None
+        
+        drops = await self.legendary.generate_drops(user_id, boss_id)
+        
+        bonus = await self.legendary.check_set_bonus(user_id)
+        
+        if drops:
+            from .inventory import add_item
+            for drop in drops:
+                await add_item(player, drop["piece_id"], 1, "传奇BOSS奖励")
+        
+        if boss_def:
+            player.exp += boss_def.bounty_exp
+            player.spirit_stones += boss_def.bounty_gold
+        
+        player.combat_state = None
+        await self._save_player(player)
+
+        return {
+            "success": True,
+            "message": f"你击败了{boss_def.name if boss_def else '传奇BOSS'}！",
+            "drops": drops,
+            "bounty_exp": boss_def.bounty_exp if boss_def else 0,
+            "bounty_gold": boss_def.bounty_gold if boss_def else 0,
+            "set_bonus": bonus,
+        }
+
+    async def get_player_sets(self, user_id: str) -> dict:
+        """获取玩家传奇套装收集情况"""
+        if not hasattr(self, 'legendary'):
+            await self.init_legendary_system()
+
+        collection = await self.legendary.get_player_collection_summary(user_id)
+        set_bonus = await self.legendary.check_set_bonus(user_id)
+
+        return {
+            "success": True,
+            "collection": collection,
+            "set_bonus": set_bonus,
+        }

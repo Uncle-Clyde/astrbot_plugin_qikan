@@ -1948,30 +1948,49 @@ def create_router(
         """玩家到达指定地点。"""
         user_id = data.get("user_id", "")
         location = data.get("location", "")
-        
+
         if not user_id:
             return {"success": False, "message": "需要user_id"}
-        
+
         player = engine.get_player(user_id)
         if not player:
             return {"success": False, "message": "玩家不存在"}
-        
+
         from ..game.map_system import TOWNS, CASTLES, VILLAGES, BANDIT_CAMPS
         all_locations = {**TOWNS, **CASTLES, **VILLAGES, **BANDIT_CAMPS}
-        
+
         loc = all_locations.get(location)
         if not loc:
             return {"success": False, "message": "地点不存在"}
-        
+
         map_state = player.map_state if hasattr(player, 'map_state') else None
+        random_event_triggered = None
+
         if map_state:
+            from_x = map_state.x
+            from_y = map_state.y
+            travel_distance = ((loc.x - from_x) ** 2 + (loc.y - from_y) ** 2) ** 0.5
+
             map_state.current_location = location
             map_state.x = loc.x
             map_state.y = loc.y
             map_state.travel_destination = ""
             map_state.travel_progress = 0
-        
-        return {
+
+            if travel_distance > 10:
+                from ..game import random_events as re_mod
+                triggered = re_mod.roll_random_event(travel_distance, player.realm)
+                if triggered:
+                    event_data = re_mod.format_event_for_api(triggered, player)
+                    random_event_triggered = event_data
+                    ws_mgr = getattr(engine, '_ws_manager', None)
+                    if ws_mgr:
+                        await ws_mgr.send_to_player(user_id, {
+                            "type": "random_event_offer",
+                            "data": event_data,
+                        })
+
+        result = {
             "success": True,
             "message": f"已到达{loc.name}",
             "location": {
@@ -1980,6 +1999,50 @@ def create_router(
                 "type": loc.location_type,
             }
         }
+        if random_event_triggered:
+            result["random_event"] = random_event_triggered
+        return result
+
+    @router.post("/api/random_event/respond")
+    async def respond_random_event(data: dict):
+        """玩家响应随机事件邀请（参与/拒绝）"""
+        user_id = data.get("user_id", "")
+        event_id = data.get("event_id", "")
+        accepted = data.get("accepted", False)
+
+        if not user_id or not event_id:
+            return {"success": False, "message": "缺少必要参数"}
+
+        player = engine.get_player(user_id)
+        if not player:
+            return {"success": False, "message": "玩家不存在"}
+
+        from ..game import random_events as re_mod
+        event = re_mod.get_event(event_id)
+        if not event:
+            return {"success": False, "message": "事件不存在"}
+
+        if not accepted:
+            return {
+                "success": True,
+                "message": f"你选择了放弃参与{event.name}",
+                "event_id": event_id,
+                "accepted": False,
+            }
+
+        result = re_mod.resolve_event(event, player)
+        if result.get("success"):
+            await engine._save_player(player)
+            await engine._notify_player_update(player)
+
+        ws_mgr = getattr(engine, '_ws_manager', None)
+        if ws_mgr and result.get("success"):
+            await ws_mgr.send_to_player(user_id, {
+                "type": "random_event_result",
+                "data": result,
+            })
+
+        return result
 
     @router.get("/api/map/factions")
     async def get_factions():
@@ -2942,5 +3005,110 @@ def create_router(
             if check.exists():
                 return {"success": True, "avatar_url": f"/static/avatars/{user_id}{ext}"}
         return {"success": False, "avatar_url": ""}
+
+    @router.get("/api/city-quests")
+    async def api_get_city_quests(request: Request):
+        """获取城市任务列表。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        return await engine.get_city_quests(user_id)
+
+    @router.post("/api/city-quests/accept")
+    async def api_accept_city_quest(request: Request):
+        """接受城市任务。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        quest_id = body.get("quest_id", "")
+        if not quest_id:
+            return {"success": False, "message": "需要quest_id"}
+        return await engine.accept_city_quest(user_id, quest_id)
+
+    @router.post("/api/city-quests/complete")
+    async def api_complete_city_quest(request: Request):
+        """提交城市任务。"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        quest_id = body.get("quest_id", "")
+        if not quest_id:
+            return {"success": False, "message": "需要quest_id"}
+        return await engine.complete_city_quest(user_id, quest_id)
+
+    @router.get("/api/legendary/bosses")
+    async def api_get_legendary_bosses(request: Request):
+        """获取传奇BOSS列表"""
+        user_id = _get_user_id(request)
+        return await engine.get_legendary_bosses(user_id)
+
+    @router.post("/api/legendary/challenge")
+    async def api_challenge_legendary(request: Request):
+        """挑战传奇BOSS"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        boss_id = body.get("boss_id", "")
+        if not boss_id:
+            return {"success": False, "message": "需要boss_id"}
+        return await engine.challenge_legendary_boss(user_id, boss_id)
+
+    @router.post("/api/legendary/defeat")
+    async def api_defeat_legendary(request: Request):
+        """击败传奇BOSS"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        try:
+            body = await request.json()
+        except Exception:
+            return {"success": False, "message": "无效的JSON数据"}
+        boss_id = body.get("boss_id", "")
+        if not boss_id:
+            return {"success": False, "message": "需要boss_id"}
+        return await engine.defeat_legendary_boss(user_id, boss_id)
+
+    @router.get("/api/legendary/sets")
+    async def api_get_player_sets(request: Request):
+        """获取玩家套装收集"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        return await engine.get_player_sets(user_id)
+
+    @router.post("/api/legendary/spawn")
+    async def api_spawn_legendary(request: Request):
+        """刷新传奇BOSS（管理员）"""
+        user_id = _get_user_id(request)
+        if not user_id:
+            return {"success": False, "message": "未登录"}
+        
+        admin_manager = engine.admin_manager
+        if not admin_manager:
+            return {"success": False, "message": "需要管理员权限"}
+        
+        admin_info = admin_manager.get_admin_info(user_id)
+        if not admin_info or admin_info.get("level", 0) < 4:
+            return {"success": False, "message": "权限不足"}
+        
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        boss_id = body.get("boss_id", "")
+        
+        return await engine.spawn_legendary_boss(boss_id)
 
     return router
