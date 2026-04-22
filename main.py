@@ -37,6 +37,7 @@ import json
 import re
 import time
 import asyncio
+from typing import Optional
 
 from astrbot.api import logger
 from astrbot.api.event import filter, AstrMessageEvent
@@ -60,6 +61,9 @@ class XiuxianPlugin(Star):
         self._web_server = None
         self._web_error_message = ""
         self._image_cache_dir = ""
+        # 持久化 DataManager / AuthManager 实例，避免 AstrBot 重载时重复创建连接
+        self._data_manager: Optional[DataManager] = None
+        self._auth_manager: Optional[AuthManager] = None
 
     def _get_cfg(self, key: str, default):
         """读取插件配置，优先使用插件级配置，兼容不同 AstrBot 版本。"""
@@ -167,25 +171,35 @@ class XiuxianPlugin(Star):
 
     async def initialize(self):
         """插件初始化：加载数据、启动游戏引擎和 Web 服务。"""
-        # 数据目录
         data_dir = os.path.join("data", "plugin_data", "astrbot_plugin_qikan")
         self._image_cache_dir = os.path.join(data_dir, "render_cache")
         os.makedirs(self._image_cache_dir, exist_ok=True)
-        data_manager = DataManager(data_dir)
-        await data_manager.initialize()
 
-        # 认证管理器（共享数据库连接）
-        auth_manager = AuthManager(data_manager.db, data_dir)
-        await auth_manager.initialize()
+        if self._data_manager is None:
+            self._data_manager = DataManager(data_dir)
+        if self._data_manager.db is None:
+            await self._data_manager.initialize()
+
+        if self._auth_manager is None or self._auth_manager._db is None:
+            self._auth_manager = AuthManager(self._data_manager.db, data_dir)
+            await self._auth_manager.initialize()
 
         # 游戏引擎
         cooldown = self._get_cfg_int("cultivate_cooldown", 60)
-        self._engine = GameEngine(data_manager, cultivate_cooldown=cooldown)
-        self._engine.auth = auth_manager
-        self._engine.set_name_reviewer(self._review_name_with_ai)
-        self._engine.set_chat_reviewer(self._review_chat_with_ai)
-        self._engine.set_sect_name_reviewer(self._review_sect_name_with_ai)
-        await self._engine.initialize()
+        if self._engine is None:
+            self._engine = GameEngine(self._data_manager, cultivate_cooldown=cooldown)
+            self._engine.auth = self._auth_manager
+            self._engine.set_name_reviewer(self._review_name_with_ai)
+            self._engine.set_chat_reviewer(self._review_chat_with_ai)
+            self._engine.set_sect_name_reviewer(self._review_sect_name_with_ai)
+        else:
+            # 已有 engine，只更新配置
+            pass
+
+        if not getattr(self._engine, "_initialized", False):
+            await self._engine.initialize()
+            self._engine._initialized = True
+
         self._engine._checkin_config = self._get_checkin_config()
         logger.info("骑砍英雄传：游戏引擎已初始化")
 

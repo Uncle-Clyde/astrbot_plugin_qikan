@@ -9,6 +9,7 @@ import logging
 import random
 import re
 import time
+import aiosqlite
 from dataclasses import fields
 from typing import Awaitable, Callable, Optional
 
@@ -2176,10 +2177,20 @@ class GameEngine:
             try:
                 if self.auth:
                     await self.auth.save()
+            except aiosqlite.OperationalError as e:
+                if "database is locked" in str(e).lower():
+                    logger.debug("周期性清理：数据库忙，跳过本轮")
+                else:
+                    logger.exception("战争大陆：定时清理认证数据异常")
             except Exception:
                 logger.exception("战争大陆：定时清理认证数据异常")
             try:
                 await self._process_market_cleanup()
+            except aiosqlite.OperationalError as e:
+                if "database is locked" in str(e).lower():
+                    logger.debug("周期性集市清理：数据库忙，跳过本轮")
+                else:
+                    logger.exception("战争大陆：定时清理集市过期商品异常")
             except Exception:
                 logger.exception("战争大陆：定时清理集市过期商品异常")
             try:

@@ -52,33 +52,34 @@ class AuthManager:
 
     async def initialize(self) -> None:
         """建表并加载数据到内存缓存。"""
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS web_tokens (
-                token      TEXT PRIMARY KEY,
-                user_id    TEXT NOT NULL,
-                expires_at REAL NOT NULL
-            )
-        """)
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS bind_keys (
-                key        TEXT PRIMARY KEY,
-                user_id    TEXT NOT NULL,
-                expires_at REAL NOT NULL
-            )
-        """)
-        await self._db.execute("""
-            CREATE TABLE IF NOT EXISTS chat_bindings (
-                chat_user_id TEXT PRIMARY KEY,
-                user_id      TEXT NOT NULL,
-                expires_at   REAL NOT NULL
-            )
-        """)
-        await self._db.commit()
-        # 迁移旧 JSON 数据（如果存在）
-        await self._migrate_json_data()
-        # 加载到内存
-        await self._load_from_db()
-        self._cleanup_expired()
+        async with self._auth_lock:
+            await self._db.execute("""
+                CREATE TABLE IF NOT EXISTS web_tokens (
+                    token      TEXT PRIMARY KEY,
+                    user_id    TEXT NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+            """)
+            await self._db.execute("""
+                CREATE TABLE IF NOT EXISTS bind_keys (
+                    key        TEXT PRIMARY KEY,
+                    user_id    TEXT NOT NULL,
+                    expires_at REAL NOT NULL
+                )
+            """)
+            await self._db.execute("""
+                CREATE TABLE IF NOT EXISTS chat_bindings (
+                    chat_user_id TEXT PRIMARY KEY,
+                    user_id      TEXT NOT NULL,
+                    expires_at   REAL NOT NULL
+                )
+            """)
+            await self._db.commit()
+            # 迁移旧 JSON 数据（如果存在）
+            await self._migrate_json_data()
+            # 加载到内存
+            await self._load_from_db()
+            self._cleanup_expired()
 
     async def _migrate_json_data(self):
         """若存在旧 auth_tokens.json 且数据库表未完全迁移，则自动迁移。"""

@@ -58,6 +58,44 @@ class DataManager:
         self.db: Optional[aiosqlite.Connection] = None
         self._shop_purchase_lock = asyncio.Lock()
         self._sect_schema_checked = False
+        self._db_lock = asyncio.Lock()
+        self._warehouse_lock = asyncio.Lock()
+
+    @staticmethod
+    async def _retry_db_op(db_path, ops_fn, *, max_retries=8, base_delay=0.15):
+        """在独立连接上执行可重试的数据库操作序列。"""
+        last_exc = None
+        for attempt in range(max_retries + 1):
+            conn = await aiosqlite.connect(db_path, timeout=60.0)
+            try:
+                conn.row_factory = aiosqlite.Row
+                await conn.execute("PRAGMA journal_mode=WAL")
+                await conn.execute("PRAGMA busy_timeout=60000")
+                await conn.execute("BEGIN IMMEDIATE")
+
+                result = await ops_fn(conn)
+
+                if not getattr(result, "_rollback", False):
+                    await conn.commit()
+                return getattr(result, "data", None)
+            except aiosqlite.OperationalError as exc:
+                msg = str(exc).lower()
+                if "database is locked" in msg or "busy" in msg:
+                    last_exc = exc
+                    delay = base_delay * (2 ** attempt) + 0.05
+                    await asyncio.sleep(delay)
+                else:
+                    raise
+            finally:
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+
+        logger.warning("数据库忙/锁定超时（已重试 %d 次）", max_retries)
+        raise aiosqlite.OperationalError(
+            f"database is locked (retried {max_retries} times)"
+        ) from last_exc if last_exc else None
 
     class TransactionAbort(Exception):
         """在事务上下文中主动中止，携带用户提示消息。"""
@@ -77,30 +115,86 @@ class DataManager:
                 await tx.execute("INSERT ...", (...))
             # 离开 with 块自动 commit；异常则自动 rollback
         """
-        conn = await aiosqlite.connect(self._db_path, timeout=30.0)
-        conn.row_factory = aiosqlite.Row
-        await conn.execute("PRAGMA journal_mode=WAL")
-        await conn.execute("PRAGMA busy_timeout=30000")
-        await conn.execute("BEGIN IMMEDIATE")
-        try:
-            yield conn
-            await conn.commit()
-        except Exception:
-            await conn.rollback()
-            raise
-        finally:
-            await conn.close()
+        last_exc = None
+        for attempt in range(8 + 1):
+            conn = await aiosqlite.connect(self._db_path, timeout=60.0)
+            try:
+                conn.row_factory = aiosqlite.Row
+                await conn.execute("PRAGMA journal_mode=WAL")
+                await conn.execute("PRAGMA busy_timeout=60000")
+                await conn.execute("BEGIN IMMEDIATE")
+
+                yield conn
+                await conn.commit()
+                return  # ← 成功后退出重试循环
+            except self.TransactionAbort:
+                raise
+            except Exception as exc:
+                await conn.rollback()
+                if isinstance(exc, aiosqlite.OperationalError):
+                    msg = str(exc).lower()
+                    if "database is locked" in msg or "busy" in msg:
+                        last_exc = exc
+                        delay = 0.15 * (2 ** attempt) + 0.05
+                        await asyncio.sleep(delay)
+                        continue
+                raise
+            finally:
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+
+        if last_exc is not None:
+            logger.warning("事务操作锁定超时（已重试 %d 次）", 8)
+            raise aiosqlite.OperationalError(
+                f"database is locked (retried {8} times)"
+            ) from last_exc
 
     async def initialize(self):
         """初始化数据目录、打开数据库、建表、迁移旧数据。"""
-        os.makedirs(self._data_dir, exist_ok=True)
-        self.db = await aiosqlite.connect(self._db_path, timeout=30.0)
-        self.db.row_factory = aiosqlite.Row
-        await self.db.execute("PRAGMA journal_mode=WAL")
-        await self.db.execute("PRAGMA busy_timeout=30000")
-        await self._create_tables()
-        await self._ensure_player_schema()
-        await self._migrate_json_data()
+        async with self._db_lock:
+            if self.db is not None:
+                try:
+                    await self.db.close()
+                except Exception:
+                    pass
+            self.db = None
+            os.makedirs(self._data_dir, exist_ok=True)
+
+            db_dir = os.path.dirname(self._db_path)
+            db_name = os.path.splitext(os.path.basename(self._db_path))[0]
+            for suffix in (".wal", "-shm", "-journal"):
+                wal_file = os.path.join(db_dir, db_name + suffix)
+                try:
+                    if os.path.exists(wal_file):
+                        os.remove(wal_file)
+                except Exception:
+                    pass
+
+            await asyncio.sleep(0.5)
+
+            for attempt in range(5):
+                try:
+                    self.db = await aiosqlite.connect(self._db_path, timeout=60.0)
+                    break
+                except aiosqlite.OperationalError as e:
+                    if "locked" in str(e).lower():
+                        delay = 0.5 * (2 ** attempt)
+                        logger.warning("数据库文件被锁定，%d秒后重试（尝试 %d/5）", delay, attempt + 1)
+                        await asyncio.sleep(delay)
+                    else:
+                        raise
+            else:
+                raise aiosqlite.OperationalError("无法打开数据库，已重试5次")
+
+            self.db.row_factory = aiosqlite.Row
+            await self.db.execute("PRAGMA journal_mode=WAL")
+            await self.db.execute("PRAGMA busy_timeout=60000")
+            await self.db.execute("PRAGMA read_uncommitted=1")
+            await self._create_tables()
+            await self._ensure_player_schema()
+            await self._migrate_json_data()
 
     async def _create_tables(self):
         """创建数据库表。"""
@@ -2366,44 +2460,64 @@ rows,
     ) -> dict[str, int | bool]:
         """以单个事务提交商店购买记录和玩家状态。"""
         conn: aiosqlite.Connection | None = None
-        try:
-            conn = await aiosqlite.connect(self._db_path, timeout=30.0)
-            await conn.execute("PRAGMA journal_mode=WAL")
-            await conn.execute("PRAGMA busy_timeout=30000")
-            await conn.execute("BEGIN IMMEDIATE")
+        last_exc = None
+        for attempt in range(8 + 1):
+            try:
+                conn = await aiosqlite.connect(self._db_path, timeout=60.0)
+                await conn.execute("PRAGMA journal_mode=WAL")
+                await conn.execute("PRAGMA busy_timeout=60000")
+                await conn.execute("BEGIN IMMEDIATE")
 
-            sold_today = 0
-            remaining = 0
-            if daily_limit > 0:
-                cur = await conn.execute(
-                    "SELECT COALESCE(SUM(quantity), 0) FROM shop_purchases WHERE item_id = ? AND purchased_at = ?",
-                    (item_id, date_str),
+                sold_today = 0
+                remaining = 0
+                if daily_limit > 0:
+                    cur = await conn.execute(
+                        "SELECT COALESCE(SUM(quantity), 0) FROM shop_purchases WHERE item_id = ? AND purchased_at = ?",
+                        (item_id, date_str),
+                    )
+                    row = await cur.fetchone()
+                    sold_today = int(row[0] or 0) if row else 0
+                    remaining = max(0, int(daily_limit) - sold_today)
+                    if quantity > remaining:
+                        await conn.rollback()
+                        return {"success": False, "remaining": remaining, "sold_today": sold_today}
+
+                await conn.execute(
+                    "INSERT INTO shop_purchases (user_id, item_id, quantity, unit_price, purchased_at) VALUES (?, ?, ?, ?, ?)",
+                    (player.user_id, item_id, quantity, unit_price, date_str),
                 )
-                row = await cur.fetchone()
-                sold_today = int(row[0] or 0) if row else 0
-                remaining = max(0, int(daily_limit) - sold_today)
-                if quantity > remaining:
-                    await conn.rollback()
-                    return {"success": False, "remaining": remaining, "sold_today": sold_today}
+                await self._upsert_player(player, db=conn)
+                await conn.commit()
+                return {
+                    "success": True,
+                    "remaining": max(0, remaining - quantity) if daily_limit > 0 else 0,
+                    "sold_today": sold_today + quantity,
+                }
+            except aiosqlite.OperationalError as exc:
+                msg = str(exc).lower()
+                if conn is not None:
+                    try:
+                        await conn.rollback()
+                    except Exception:
+                        pass
+                if "database is locked" in msg or "busy" in msg:
+                    last_exc = exc
+                    delay = 0.15 * (2 ** attempt) + 0.05
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    raise
+            finally:
+                if conn is not None:
+                    try:
+                        await conn.close()
+                    except Exception:
+                        pass
 
-            await conn.execute(
-                "INSERT INTO shop_purchases (user_id, item_id, quantity, unit_price, purchased_at) VALUES (?, ?, ?, ?, ?)",
-                (player.user_id, item_id, quantity, unit_price, date_str),
-            )
-            await self._upsert_player(player, db=conn)
-            await conn.commit()
-            return {
-                "success": True,
-                "remaining": max(0, remaining - quantity) if daily_limit > 0 else 0,
-                "sold_today": sold_today + quantity,
-            }
-        except Exception:
-            if conn is not None:
-                await conn.rollback()
-            raise
-        finally:
-            if conn is not None:
-                await conn.close()
+        logger.warning("商店购买锁定超时（已重试 %d 次）", 8)
+        raise aiosqlite.OperationalError(
+            f"database is locked (retried {8} times)"
+        ) from last_exc if last_exc else None
 
     # ── 公告管理 ────────────────────────────────────────────
     async def get_active_announcements(self) -> list[dict]:
@@ -2949,70 +3063,97 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         返回 {"success": True, "contribution": int}
         或 {"success": False, "reason": ...}。
         """
-        conn: aiosqlite.Connection | None = None
-        try:
-            conn = await aiosqlite.connect(self._db_path, timeout=30.0)
-            await conn.execute("PRAGMA journal_mode=WAL")
-            await conn.execute("PRAGMA busy_timeout=30000")
-            await conn.execute("BEGIN IMMEDIATE")
+        last_exc = None
+        for attempt in range(8 + 1):
+            conn: aiosqlite.Connection | None = None
+            try:
+                conn = await aiosqlite.connect(self._db_path, timeout=60.0)
+                await conn.execute("PRAGMA journal_mode=WAL")
+                await conn.execute("PRAGMA busy_timeout=60000")
+                await conn.execute("BEGIN IMMEDIATE")
 
-            # 复检仓库容量
-            cur = await conn.execute(
-                "SELECT warehouse_capacity FROM sects WHERE sect_id = ?", (sect_id,),
-            )
-            sect_row = await cur.fetchone()
-            if not sect_row:
-                await conn.rollback()
-                return {"success": False, "reason": "sect_not_found"}
-            capacity = sect_row[0] if sect_row[0] is not None else 200
-
-            cur2 = await conn.execute(
-                "SELECT quantity FROM sect_warehouse WHERE sect_id = ? AND item_id = ?",
-                (sect_id, item_id),
-            )
-            existing = await cur2.fetchone()
-            if not existing or existing[0] == 0:
-                cur3 = await conn.execute(
-                    "SELECT COUNT(*) FROM sect_warehouse WHERE sect_id = ? AND quantity > 0",
-                    (sect_id,),
+                # 复检仓库容量
+                cur = await conn.execute(
+                    "SELECT warehouse_capacity FROM sects WHERE sect_id = ?", (sect_id,),
                 )
-                slots_used = (await cur3.fetchone())[0]
-                if slots_used >= capacity:
+                sect_row = await cur.fetchone()
+                if not sect_row:
                     await conn.rollback()
-                    return {"success": False, "reason": "warehouse_full"}
+                    return {"success": False, "reason": "sect_not_found"}
+                capacity = sect_row[0] if sect_row[0] is not None else 200
 
-            # 写仓库
-            await conn.execute(
-                """INSERT INTO sect_warehouse (sect_id, item_id, quantity)
-                   VALUES (?, ?, ?)
-                   ON CONFLICT(sect_id, item_id) DO UPDATE SET quantity = quantity + ?""",
-                (sect_id, item_id, quantity, quantity),
-            )
+                cur2 = await conn.execute(
+                    "SELECT quantity FROM sect_warehouse WHERE sect_id = ? AND item_id = ?",
+                    (sect_id, item_id),
+                )
+                existing = await cur2.fetchone()
+                if not existing or existing[0] == 0:
+                    cur3 = await conn.execute(
+                        "SELECT COUNT(*) FROM sect_warehouse WHERE sect_id = ? AND quantity > 0",
+                        (sect_id,),
+                    )
+                    slots_used = (await cur3.fetchone())[0]
+                    if slots_used >= capacity:
+                        await conn.rollback()
+                        return {"success": False, "reason": "warehouse_full"}
 
-            # 加贡献点（校验成员仍在该家族）
-            cur_contrib = await conn.execute(
-                "UPDATE sect_members SET contribution_points = contribution_points + ? "
-                "WHERE user_id = ? AND sect_id = ?",
-                (contribution_delta, player.user_id, sect_id),
-            )
-            if cur_contrib.rowcount == 0:
-                await conn.rollback()
-                return {"success": False, "reason": "member_not_found"}
+                # 写仓库
+                await conn.execute(
+                    """INSERT INTO sect_warehouse (sect_id, item_id, quantity)
+                       VALUES (?, ?, ?)
+                       ON CONFLICT(sect_id, item_id) DO UPDATE SET quantity = quantity + ?""",
+                    (sect_id, item_id, quantity, quantity),
+                )
 
-            # 玩家落库
-            await self._upsert_player(player, db=conn)
-            await conn.commit()
+                # 加贡献点（校验成员仍在该家族）
+                cur_contrib = await conn.execute(
+                    "UPDATE sect_members SET contribution_points = contribution_points + ? "
+                    "WHERE user_id = ? AND sect_id = ?",
+                    (contribution_delta, player.user_id, sect_id),
+                )
+                if cur_contrib.rowcount == 0:
+                    await conn.rollback()
+                    return {"success": False, "reason": "member_not_found"}
 
-            # 事务完成后读贡献点（用主连接）
-            new_contribution = await self.get_member_contribution(player.user_id)
-            return {"success": True, "contribution": new_contribution}
-        except Exception:
-            if conn is not None:
-                await conn.rollback()
-            raise
-        finally:
-            if conn is not None:
-                await conn.close()
+                # 玩家落库
+                await self._upsert_player(player, db=conn)
+                await conn.commit()
+
+                # 事务完成后读贡献点（用主连接）
+                new_contribution = await self.get_member_contribution(player.user_id)
+                return {"success": True, "contribution": new_contribution}
+            except aiosqlite.OperationalError as exc:
+                msg = str(exc).lower()
+                if conn is not None:
+                    try:
+                        await conn.rollback()
+                    except Exception:
+                        pass
+                if "database is locked" in msg or "busy" in msg:
+                    last_exc = exc
+                    delay = 0.15 * (2 ** attempt) + 0.05
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                if conn is not None:
+                    try:
+                        await conn.rollback()
+                    except Exception:
+                        pass
+                raise e
+            finally:
+                if conn is not None:
+                    try:
+                        await conn.close()
+                    except Exception:
+                        pass
+
+        logger.warning("仓库入库锁定超时（已重试 %d 次）", 8)
+        raise aiosqlite.OperationalError(
+            f"database is locked (retried {8} times)"
+        ) from last_exc if last_exc else None
 
     async def warehouse_exchange_atomic(
         self, player: "Player", sect_id: str, item_id: str, quantity: int,
@@ -3023,55 +3164,82 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         返回 {"success": True, "contribution": int}
         或 {"success": False, "reason": "insufficient_stock"|"insufficient_contribution"}。
         """
-        conn: aiosqlite.Connection | None = None
-        try:
-            conn = await aiosqlite.connect(self._db_path, timeout=30.0)
-            await conn.execute("PRAGMA journal_mode=WAL")
-            await conn.execute("PRAGMA busy_timeout=30000")
-            await conn.execute("BEGIN IMMEDIATE")
+        last_exc = None
+        for attempt in range(8 + 1):
+            conn: aiosqlite.Connection | None = None
+            try:
+                conn = await aiosqlite.connect(self._db_path, timeout=60.0)
+                await conn.execute("PRAGMA journal_mode=WAL")
+                await conn.execute("PRAGMA busy_timeout=60000")
+                await conn.execute("BEGIN IMMEDIATE")
 
-            # 条件扣贡献点
-            cur = await conn.execute(
-                "UPDATE sect_members "
-                "SET contribution_points = contribution_points - ? "
-                "WHERE user_id = ? AND sect_id = ? AND contribution_points >= ?",
-                (contribution_cost, player.user_id, sect_id, contribution_cost),
-            )
-            if cur.rowcount == 0:
-                await conn.rollback()
-                return {"success": False, "reason": "insufficient_contribution"}
+                # 条件扣贡献点
+                cur = await conn.execute(
+                    "UPDATE sect_members "
+                    "SET contribution_points = contribution_points - ? "
+                    "WHERE user_id = ? AND sect_id = ? AND contribution_points >= ?",
+                    (contribution_cost, player.user_id, sect_id, contribution_cost),
+                )
+                if cur.rowcount == 0:
+                    await conn.rollback()
+                    return {"success": False, "reason": "insufficient_contribution"}
 
-            # 条件扣仓库
-            cur2 = await conn.execute(
-                "UPDATE sect_warehouse "
-                "SET quantity = quantity - ? "
-                "WHERE sect_id = ? AND item_id = ? AND quantity >= ?",
-                (quantity, sect_id, item_id, quantity),
-            )
-            if cur2.rowcount == 0:
-                await conn.rollback()
-                return {"success": False, "reason": "insufficient_stock"}
+                # 条件扣仓库
+                cur2 = await conn.execute(
+                    "UPDATE sect_warehouse "
+                    "SET quantity = quantity - ? "
+                    "WHERE sect_id = ? AND item_id = ? AND quantity >= ?",
+                    (quantity, sect_id, item_id, quantity),
+                )
+                if cur2.rowcount == 0:
+                    await conn.rollback()
+                    return {"success": False, "reason": "insufficient_stock"}
 
-            # 清理零库存行
-            await conn.execute(
-                "DELETE FROM sect_warehouse WHERE sect_id = ? AND item_id = ? AND quantity <= 0",
-                (sect_id, item_id),
-            )
+                # 清理零库存行
+                await conn.execute(
+                    "DELETE FROM sect_warehouse WHERE sect_id = ? AND item_id = ? AND quantity <= 0",
+                    (sect_id, item_id),
+                )
 
-            # 玩家落库
-            await self._upsert_player(player, db=conn)
-            await conn.commit()
+                # 玩家落库
+                await self._upsert_player(player, db=conn)
+                await conn.commit()
 
-            # 事务完成后读贡献点（用主连接）
-            new_contribution = await self.get_member_contribution(player.user_id)
-            return {"success": True, "contribution": new_contribution}
-        except Exception:
-            if conn is not None:
-                await conn.rollback()
-            raise
-        finally:
-            if conn is not None:
-                await conn.close()
+                # 事务完成后读贡献点（用主连接）
+                new_contribution = await self.get_member_contribution(player.user_id)
+                return {"success": True, "contribution": new_contribution}
+            except aiosqlite.OperationalError as exc:
+                msg = str(exc).lower()
+                if conn is not None:
+                    try:
+                        await conn.rollback()
+                    except Exception:
+                        pass
+                if "database is locked" in msg or "busy" in msg:
+                    last_exc = exc
+                    delay = 0.15 * (2 ** attempt) + 0.05
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    raise
+            except Exception as e:
+                if conn is not None:
+                    try:
+                        await conn.rollback()
+                    except Exception:
+                        pass
+                raise e
+            finally:
+                if conn is not None:
+                    try:
+                        await conn.close()
+                    except Exception:
+                        pass
+
+        logger.warning("仓库兑换锁定超时（已重试 %d 次）", 8)
+        raise aiosqlite.OperationalError(
+            f"database is locked (retried {8} times)"
+        ) from last_exc if last_exc else None
 
     # ── 家族贡献点规则 ────────────────────────────────────
 
