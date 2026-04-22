@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import secrets
 import time
@@ -12,15 +13,18 @@ from typing import Optional
 
 import aiosqlite
 
+logger = logging.getLogger("mbwar.auth")
 TOKEN_EXPIRY = 7 * 24 * 3600  # 7 天（秒）
 
 
 def _hash_password(password: str, salt: str = "") -> str:
-    """SHA-256 加盐哈希。"""
+    """SHA-256 加盐哈希（多次迭代防暴力破解）。"""
     if not salt:
-        salt = secrets.token_hex(8)
-    h = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
-    return f"{salt}${h}"
+        salt = secrets.token_hex(16)
+    hashed = password
+    for _ in range(100000):
+        hashed = hashlib.sha256((salt + hashed).encode("utf-8")).hexdigest()
+    return f"{salt}${hashed}"
 
 
 def _verify_password(password: str, stored_hash: str) -> bool:
@@ -46,7 +50,7 @@ class AuthManager:
         # 串行化所有认证状态写入，防止并发修改+save()互相踩踏
         self._auth_lock = asyncio.Lock()
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         """建表并加载数据到内存缓存。"""
         await self._db.execute("""
             CREATE TABLE IF NOT EXISTS web_tokens (
@@ -117,7 +121,7 @@ class AuthManager:
             if not os.path.exists(backup):
                 os.rename(json_file, backup)
         except Exception:
-            pass
+            logger.warning("JSON数据迁移失败，跳过")
 
     async def _load_from_db(self):
         """从数据库加载所有认证数据到内存。"""

@@ -62,6 +62,7 @@ class ConnectionManager:
     def __init__(self, engine: GameEngine):
         self._engine = engine
         self._connections: dict[str, WebSocket] = {}  # user_id -> websocket
+        self._connection_health: dict[str, float] = {}  # user_id -> last_ping_ts
         self._market_pages: dict[str, int] = {}
         self._market_my_watchers: set[str] = set()
         self._rankings_dirty = False
@@ -71,6 +72,8 @@ class ConnectionManager:
         # 世界频道
         self._world_chat_cooldowns: dict[str, float] = {}  # user_id -> last_send_ts
         self._chat_cleanup_task: asyncio.Task | None = None
+        # 连接健康检查
+        self._health_check_task: asyncio.Task | None = None
         # 玩家位置管理
         from ..game.map_system import get_position_manager
         self._position_manager = get_position_manager()
@@ -79,15 +82,18 @@ class ConnectionManager:
 
     async def connect(self, user_id: str, websocket: WebSocket):
         self._connections[user_id] = websocket
+        self._connection_health[user_id] = time.time()
+        self._start_health_check()
 
     def disconnect(self, user_id: str):
         self._connections.pop(user_id, None)
+        self._connection_health.pop(user_id, None)
         self._market_pages.pop(user_id, None)
         self._market_my_watchers.discard(user_id)
         # 移除玩家位置缓存
         self._position_manager.remove_player(user_id)
         self._position_update_cooldowns.pop(user_id, None)
-        
+
         # 广播玩家离开给附近的人
         nearby_users = self._position_manager.broadcast_to_nearby(user_id, 150)
         for uid in nearby_users:
@@ -98,6 +104,36 @@ class ConnectionManager:
                     "data": {"user_id": user_id}
                 }))
 
+    def _start_health_check(self):
+        """启动连接健康检查任务。"""
+        if self._health_check_task and not self._health_check_task.done():
+            return
+        self._health_check_task = asyncio.create_task(self._health_check_loop())
+
+    async def _health_check_loop(self):
+        """定期检测连接健康性，移除超时 Dead 连接。"""
+        logger = logging.getLogger("qikan.ws_health")
+        while True:
+            try:
+                await asyncio.sleep(30)
+                await self._check_connection_health()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logger.exception("WebSocket健康检查异常")
+
+    async def _check_connection_health(self):
+        """检测并移除超时 Dead 连接。"""
+        now = time.time()
+        dead = []
+        for uid, last_ping in list(self._connection_health.items()):
+            if now - last_ping > 90:
+                dead.append(uid)
+        for uid in dead:
+            ws_logger.warning("移除超时连接: %s (无响应>90秒)", uid)
+            self.disconnect(uid)
+        return dead
+
     def online_count(self) -> int:
         return len(self._connections)
 
@@ -106,17 +142,20 @@ class ConnectionManager:
         if ws:
             try:
                 await ws.send_json(data)
+                self._connection_health[user_id] = time.time()
             except Exception:
                 self.disconnect(user_id)
 
     async def broadcast(self, data: dict, exclude_user_id: str | None = None):
         """向所有在线连接广播消息。"""
         dead_users: list[str] = []
+        now = time.time()
         for uid, ws in list(self._connections.items()):
             if exclude_user_id and uid == exclude_user_id:
                 continue
             try:
                 await ws.send_json(data)
+                self._connection_health[uid] = now
             except Exception:
                 dead_users.append(uid)
         for uid in dead_users:

@@ -937,19 +937,19 @@ class XiuxianPlugin(Star):
     @qikan_group.command("排行")
     async def show_rankings(self, event: AstrMessageEvent):
         """查看骑士爵位排行榜。"""
-        rankings = self._engine.get_rankings(limit=10)
-        total = len(self._engine._players)
-        online_ids = self._engine.get_online_user_ids()
-        # 找自己的排名
-        my_rank = None
         player_id = self._resolve_player_id(event)
+        my_rank = None
         if player_id:
             all_rankings = self._engine.get_rankings(limit=999)
             for r in all_rankings:
-                p = self._engine.get_player_by_name(r["name"])
-                if p and p.user_id == player_id:
+                if r["user_id"] == player_id:
                     my_rank = r
                     break
+            rankings = all_rankings[:10]
+        else:
+            rankings = self._engine.get_rankings(limit=10)
+        total = len(self._engine._players)
+        online_ids = self._engine.get_online_user_ids()
         img_bytes = renderer.render_ranking(rankings, total, len(online_ids), my_rank)
         img_path = self._render_image_path(img_bytes, "ranking")
         if not img_path:
@@ -2093,6 +2093,238 @@ class XiuxianPlugin(Star):
             lines.append(f"  {m['name']}: {m['price']}第纳尔")
         
         yield event.plain_result("\n".join(lines))
+
+    @qikan_group.command("任务")
+    async def city_quests_cmd(self, event: AstrMessageEvent):
+        """查看城市任务列表"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.get_city_quests(player_id)
+        if not result.get("success"):
+            yield event.plain_result(result.get("message", "获取任务失败"))
+            return
+        
+        location_name = result.get("location_name", "未知")
+        available = result.get("available_quests", [])
+        active = result.get("active_quests", [])
+        
+        lines = [f"📋 城镇任务 - {location_name}", ""]
+        
+        if active:
+            lines.append("🔄 进行中的任务：")
+            for q in active:
+                progress = q.get("progress", 0)
+                target = q.get("target_count", 1)
+                name = q.get("name", "")
+                lines.append(f"  • {name} ({progress}/{target})")
+            lines.append("")
+        
+        lines.append("📋 可接任务：")
+        if not available:
+            lines.append("  暂无可用任务")
+        else:
+            for i, q in enumerate(available[:8], 1):
+                name = q.get("name", "")
+                qtype = q.get("quest_type", "")
+                exp = q.get("exp_reward", 0)
+                gold = q.get("gold_reward", 0)
+                lines.append(f"  {i}. {name}")
+                lines.append(f"     类型:{qtype} 奖励:{exp}经验/{gold}金币")
+        
+        lines.append("")
+        lines.append(f"用法：{self._cmd('接受任务 <编号>')} 接受任务")
+        lines.append(f"       {self._cmd('提交任务 <编号>')} 提交任务")
+        
+        yield event.plain_result("\n".join(lines))
+
+    @qikan_group.command("接受任务")
+    async def accept_quest_cmd(self, event: AstrMessageEvent, quest_index: str = ""):
+        """接受城市任务"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not quest_index.strip():
+            yield event.plain_result(f"用法：{self._cmd('接受任务 <编号>')}\n先使用 {self._cmd('任务')} 查看可用任务编号")
+            return
+        
+        try:
+            index = int(quest_index.strip()) - 1
+        except ValueError:
+            yield event.plain_result("请输入有效的任务编号")
+            return
+        
+        quests_result = await self._engine.get_city_quests(player_id)
+        if not quests_result.get("success"):
+            yield event.plain_result(quests_result.get("message", "获取任务失败"))
+            return
+        
+        available = quests_result.get("available_quests", [])
+        if index < 0 or index >= len(available):
+            yield event.plain_result(f"任务编号 {quest_index} 不存在")
+            return
+        
+        quest = available[index]
+        quest_id = quest.get("quest_id", "")
+        
+        result = await self._engine.accept_city_quest(player_id, quest_id)
+        yield event.plain_result(result.get("message", "接受任务失败"))
+
+    @qikan_group.command("提交任务")
+    async def complete_quest_cmd(self, event: AstrMessageEvent, quest_index: str = ""):
+        """提交城市任务"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not quest_index.strip():
+            yield event.plain_result(f"用法：{self._cmd('提交任务 <编号>')}\n先使用 {self._cmd('任务')} 查看进行中的任务编号")
+            return
+        
+        try:
+            index = int(quest_index.strip()) - 1
+        except ValueError:
+            yield event.plain_result("请输入有效的任务编号")
+            return
+        
+        quests_result = await self._engine.get_city_quests(player_id)
+        if not quests_result.get("success"):
+            yield event.plain_result(quests_result.get("message", "获取任务失败"))
+            return
+        
+        active = quests_result.get("active_quests", [])
+        if index < 0 or index >= len(active):
+            yield event.plain_result(f"任务编号 {quest_index} 不存在")
+            return
+        
+        quest = active[index]
+        quest_id = quest.get("quest_id", "")
+        
+        result = await self._engine.complete_city_quest(player_id, quest_id)
+        yield event.plain_result(result.get("message", "提交任务失败"))
+
+    @qikan_group.command("传奇Boss")
+    async def legendary_boss_cmd(self, event: AstrMessageEvent):
+        """查看传奇BOSS列表"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.get_legendary_bosses(player_id)
+        if not result.get("success"):
+            yield event.plain_result("获取失败")
+            return
+        
+        bosses = result.get("bosses", [])
+        collection = result.get("collection", {})
+        
+        lines = ["👹 传奇BOSS列表", ""]
+        
+        for i, boss in enumerate(bosses, 1):
+            name = boss.get("name", "")
+            icon = boss.get("icon", "👹")
+            is_alive = boss.get("is_alive", False)
+            can_respawn = boss.get("can_respawn", False)
+            level = boss.get("level", 30)
+            set_name = boss.get("set_name", "")
+            
+            status = "✅ 已降临" if is_alive else ("⏳ 待刷新" if can_respawn else "❎ 休息中")
+            lines.append(f"{i}. {icon} {name} Lv.{level}")
+            lines.append(f"   状态: {status} | 套装: {set_name}")
+            lines.append(f"   赏金: {boss.get('bounty_gold', 0)}金/{boss.get('bounty_exp', 0)}经验")
+            lines.append("")
+        
+        total_pieces = collection.get("total_pieces", 0)
+        complete_sets = collection.get("complete_sets", 0)
+        lines.append(f"📦 收集: {total_pieces}件 | 完整套装: {complete_sets}套")
+        
+        lines.append("")
+        lines.append(f"用法：{self._cmd('套装')} 查看收集情况")
+        
+        yield event.plain_result("\n".join(lines))
+
+    @qikan_group.command("套装")
+    async def legendary_sets_cmd(self, event: AstrMessageEvent):
+        """查看传奇套装收集情况"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        result = await self._engine.get_player_sets(player_id)
+        if not result.get("success"):
+            yield event.plain_result("获取失败")
+            return
+        
+        collection = result.get("collection", {})
+        set_bonus = result.get("set_bonus", {})
+        
+        sets = collection.get("sets", [])
+        
+        lines = ["🛡️ 传奇套装收集", ""]
+        
+        if not sets:
+            lines.append("尚���获得任何传奇装备")
+            lines.append("击败传奇BOSS可获得")
+        else:
+            for s in sets:
+                set_name = s.get("set_name", "")
+                count = s.get("count", 0)
+                is_complete = s.get("is_complete", False)
+                check = "✅" if is_complete else "⬜"
+                lines.append(f"{check} {set_name}: {count}/5件")
+        
+        if set_bonus.get("total_bonus"):
+            lines.append("")
+            lines.append("⚡ 套装加成：")
+            tb = set_bonus["total_bonus"]
+            if tb.get("hp"):
+                lines.append(f"  生命+{tb['hp']}")
+            if tb.get("attack"):
+                lines.append(f"  攻击+{tb['attack']}")
+            if tb.get("defense"):
+                lines.append(f"  防御+{tb['defense']}")
+        
+        yield event.plain_result("\n".join(lines))
+
+    @qikan_group.command("挑战Boss")
+    async def challenge_legendary_cmd(self, event: AstrMessageEvent, boss_index: str = ""):
+        """挑战传奇BOSS"""
+        player_id = self._resolve_player_id(event)
+        if not player_id:
+            yield event.plain_result(f"你还未登录，请先 {self._cmd('登录 <密钥>')}")
+            return
+        
+        if not boss_index.strip():
+            yield event.plain_result(f"用法：{self._cmd('挑战Boss <编号>')}\n先使用 {self._cmd('传奇Boss')} 查看编号")
+            return
+        
+        try:
+            index = int(boss_index.strip()) - 1
+        except ValueError:
+            yield event.plain_result("请输入有效的编号")
+            return
+        
+        bosses_result = await self._engine.get_legendary_bosses(player_id)
+        if not bosses_result.get("success"):
+            yield event.plain_result("获取失败")
+            return
+        
+        bosses = bosses_result.get("bosses", [])
+        if index < 0 or index >= len(bosses):
+            yield event.plain_result(f"编号 {boss_index} 不存在")
+            return
+        
+        boss = bosses[index]
+        
+        result = await self._engine.challenge_legendary_boss(player_id, boss["boss_id"])
+        yield event.plain_result(result.get("message", "挑战失败"))
 
     # ══════════════════════════════════════════════════════════════
     # 管理员命令

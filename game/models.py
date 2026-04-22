@@ -404,8 +404,13 @@ class Player:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> Player:
+    def from_dict(cls, data: dict) -> "Player":
         """从字典反序列化。"""
+        if "user_id" not in data or "name" not in data:
+            raise ValueError("Missing required fields: user_id or name")
+        if not data["user_id"] or not data["name"]:
+            raise ValueError("user_id and name cannot be empty")
+
         # 处理地图状态
         map_state_data = data.get("map_state", {})
         map_state = PlayerMapState(
@@ -421,7 +426,7 @@ class Player:
             daily_quests_available=map_state_data.get("daily_quests_available", 3),
             last_daily_reset=map_state_data.get("last_daily_reset", ""),
         )
-        
+
         return cls(
             user_id=data["user_id"],
             name=data["name"],

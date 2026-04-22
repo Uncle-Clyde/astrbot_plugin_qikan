@@ -946,7 +946,7 @@ class GameEngine:
         return result
 
     @staticmethod
-    def _normalize_enabled_flag(value) -> int:
+    def _normalize_enabled_flag(value: int | str | None) -> int:
         if isinstance(value, str):
             v = value.strip().lower()
             if v in {"0", "false", "off", "no"}:
@@ -1703,7 +1703,7 @@ class GameEngine:
         await self._notify_player_update(player)
         return {"success": True, "message": f"你已遗忘技能【{name}】，获得技能卷轴"}
 
-    def _auto_unequip_invalid_gongfa(self, player) -> list[str]:
+    def _auto_unequip_invalid_gongfa(self, player: Player) -> list[str]:
         """自动卸下不在注册表中的战斗技能，返回被卸下的技能名列表。"""
         removed = []
         for slot in ("gongfa_1", "gongfa_2", "gongfa_3"):
@@ -2051,7 +2051,6 @@ class GameEngine:
 
     async def _save_player(self, player: Player):
         """保存玩家数据并通知 WebSocket。"""
-        # 兜底：若被动技能爵位不符则自动卸下为秘籍，并结转60%被动技能值
         self._auto_unequip_invalid_heart_method(player, convert_ratio=0.6, force=False)
         player.heart_method_value = max(0, int(getattr(player, "heart_method_value", 0)))
         self._clamp_player_hp(player)
@@ -2091,6 +2090,15 @@ class GameEngine:
     def _get_player_lock(self, user_id: str) -> asyncio.Lock:
         """获取玩家级锁（按需创建），用于保护需要原子修改玩家状态的操作。"""
         return self._player_locks.setdefault(user_id, asyncio.Lock())
+
+    def _release_player_lock(self, user_id: str):
+        """释放玩家锁引用，允许垃圾回收。"""
+        lock = self._player_locks.pop(user_id, None)
+        if lock and lock.locked():
+            try:
+                lock.release()
+            except RuntimeError:
+                pass
 
     @staticmethod
     def _snapshot_player(player: Player) -> Player:
@@ -2162,7 +2170,7 @@ class GameEngine:
             await self._notify_market_changed("cleanup", cleaned_count)
 
     async def _periodic_cleanup(self):
-        """每5分钟清理过期数据（Token/绑定 + 坊市过期商品）。"""
+        """每5分钟清理过期数据（Token/绑定 + 坊市过期商品 + 玩家锁）。"""
         while True:
             await asyncio.sleep(300)
             try:
@@ -2174,6 +2182,21 @@ class GameEngine:
                 await self._process_market_cleanup()
             except Exception:
                 logger.exception("战争大陆：定时清理集市过期商品异常")
+            try:
+                self._cleanup_stale_locks()
+            except Exception:
+                logger.exception("战争大陆：定时清理过期玩家锁异常")
+
+    def _cleanup_stale_locks(self):
+        """清理不再需要的玩家锁，防止内存泄漏。"""
+        stale = []
+        for uid, lock in self._player_locks.items():
+            if uid not in self._players:
+                stale.append(uid)
+        for uid in stale:
+            self._release_player_lock(uid)
+        if stale:
+            logger.debug("骑砍英雄传：清理了 %d 个过期玩家锁", len(stale))
 
     def _auto_unequip_invalid_equipment(self, player: Player) -> list[str]:
         """自动卸下当前爵位无法装备的物品并放回背包。"""
@@ -2943,6 +2966,7 @@ class GameEngine:
         for i, p in enumerate(players[:limit]):
             result.append({
                 "rank": i + 1,
+                "user_id": p.user_id,
                 "name": p.name,
                 "realm": p.realm,
                 "realm_name": get_realm_name(p.realm, p.sub_realm),

@@ -86,11 +86,16 @@ class CombatEngine:
     @staticmethod
     def _calc_damage(atk: int, dfn: int, defending: bool, crit_chance: float = 0, combo: int = 0) -> tuple[int, bool]:
         """基础伤害公式。返回(伤害值, 是否暴击)。"""
+        atk = max(0, int(atk or 0))
+        dfn = max(0, int(dfn or 0))
+        crit_chance = max(0.0, min(1.0, float(crit_chance or 0)))
+        combo = max(0, int(combo or 0))
+
         is_crit = random.random() < crit_chance
         crit_multiplier = 1.5 if is_crit else 1.0
-        
+
         combo_bonus = 1.0 + (combo * 0.05) if combo > 0 else 1.0
-        
+
         raw = max(1, int(atk * random.uniform(0.85, 1.15) * crit_multiplier * combo_bonus - dfn * 0.6))
         if defending:
             raw = max(1, raw // 2)

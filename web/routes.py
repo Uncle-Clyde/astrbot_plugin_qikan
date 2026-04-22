@@ -45,7 +45,8 @@ def create_router(
         limit_1s_count = 10000
     limit_1s_count = max(100, limit_1s_count)
     default_limit = (limit_1s_count, 1.0)
-    auth_limit = (limit_1s_count, 1.0)
+    # 认证接口严格限制：每分钟最多10次，防止暴力破解
+    auth_limit = (10, 60.0)
     admin_limit = (limit_1s_count, 1.0)
     public_limit = (limit_1s_count, 1.0)
     burst_guard_count = limit_1s_count + 1
@@ -167,13 +168,6 @@ def create_router(
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             return auth_header[7:].strip()
-        if hasattr(request, "json") and request.method == "POST":
-            try:
-                body = request._json
-                if body:
-                    return body.get("token", "")
-            except:
-                pass
         return None
 
     def _verify_token(request: Request) -> str | None:
