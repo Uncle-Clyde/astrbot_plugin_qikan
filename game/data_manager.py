@@ -172,25 +172,29 @@ class DataManager:
                 except Exception:
                     pass
 
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
-            for attempt in range(5):
+            for attempt in range(10):
                 try:
                     self.db = await aiosqlite.connect(self._db_path, timeout=60.0)
+                    await self.db.execute("PRAGMA journal_mode=WAL")
+                    await self.db.execute("PRAGMA busy_timeout=60000")
+                    await self.db.execute("BEGIN IMMEDIATE")
+                    await self.db.commit()
+                    logger.info(f"骑砍英雄传：数据库连接成功（尝试 {attempt + 1}/10）")
                     break
                 except aiosqlite.OperationalError as e:
-                    if "locked" in str(e).lower():
-                        delay = 0.5 * (2 ** attempt)
-                        logger.warning("数据库文件被锁定，%d秒后重试（尝试 %d/5）", delay, attempt + 1)
+                    msg = str(e).lower()
+                    if "locked" in msg or "busy" in msg:
+                        delay = 0.5 * (2 ** attempt) + 0.1 * attempt
+                        logger.warning(f"骑砍英雄传：数据库被锁定，{delay:.1f}秒后重试（尝试 {attempt + 1}/10）: {e}")
                         await asyncio.sleep(delay)
                     else:
                         raise
             else:
-                raise aiosqlite.OperationalError("无法打开数据库，已重试5次")
+                raise aiosqlite.OperationalError("无法打开数据库，已重试10次")
 
             self.db.row_factory = aiosqlite.Row
-            await self.db.execute("PRAGMA journal_mode=WAL")
-            await self.db.execute("PRAGMA busy_timeout=60000")
             await self.db.execute("PRAGMA read_uncommitted=1")
             await self._create_tables()
             await self._ensure_player_schema()

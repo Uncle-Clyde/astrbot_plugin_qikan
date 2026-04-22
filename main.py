@@ -175,14 +175,33 @@ class XiuxianPlugin(Star):
         self._image_cache_dir = os.path.join(data_dir, "render_cache")
         os.makedirs(self._image_cache_dir, exist_ok=True)
 
-        if self._data_manager is None:
-            self._data_manager = DataManager(data_dir)
-        if self._data_manager.db is None:
-            await self._data_manager.initialize()
+        # 强制清理：重装插件时，旧的 DataManager 实例和数据库连接可能已被锁定
+        if self._data_manager is not None:
+            logger.info("骑砍英雄传：强制清理旧 DataManager...")
+            try:
+                if self._data_manager.db is not None:
+                    await self._data_manager.db.close()
+            except Exception:
+                pass
+            self._data_manager = None
 
-        if self._auth_manager is None or self._auth_manager._db is None:
-            self._auth_manager = AuthManager(self._data_manager.db, data_dir)
-            await self._auth_manager.initialize()
+        # 强制清理残留的 WAL 相关文件
+        for suffix in (".wal", "-shm", "-journal"):
+            wal_file = os.path.join(data_dir, f"qikan{suffix}")
+            try:
+                if os.path.exists(wal_file):
+                    os.remove(wal_file)
+                    logger.info(f"骑砍英雄传：已删除残留文件 {wal_file}")
+            except Exception:
+                pass
+
+        await asyncio.sleep(0.3)
+
+        self._data_manager = DataManager(data_dir)
+        await self._data_manager.initialize()
+
+        self._auth_manager = AuthManager(self._data_manager.db, data_dir)
+        await self._auth_manager.initialize()
 
         # 游戏引擎
         cooldown = self._get_cfg_int("cultivate_cooldown", 60)
