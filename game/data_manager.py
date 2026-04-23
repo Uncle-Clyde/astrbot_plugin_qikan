@@ -3346,9 +3346,9 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             """INSERT INTO sect_tasks 
                (sect_id, creator_id, title, description, task_type, target_count, 
                 reward_points, reward_item_id, reward_item_count, status, created_at, expires_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (sect_id, creator_id, title, description, task_type, target_count,
-             reward_points, reward_item_id, reward_item_count, now, expires_at),
+             reward_points, reward_item_id, reward_item_count, 'active', now, expires_at),
         )
         await self.db.commit()
         return cur.lastrowid or 0
